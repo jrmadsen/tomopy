@@ -112,7 +112,7 @@ deviceReduceKernel(const float* in, float* out, int N)
 {
     int   i0      = blockIdx.x * blockDim.x + threadIdx.x;
     int   istride = blockDim.x * gridDim.x;
-    float sum     = 0;
+    float sum     = 0.0f;
 
     // reduce multiple elements per thread
     for(int i = i0; i < N; i += istride)

@@ -69,7 +69,6 @@ add_c_flag_if_avail("-Wno-attributes")
 add_c_flag_if_avail("-Wno-unused-variable")
 add_c_flag_if_avail("-Wno-unknown-pragmas")
 add_c_flag_if_avail("-Wno-unused-parameter")
-add_c_flag_if_avail("-Wno-reserved-id-macro")
 add_c_flag_if_avail("-Wunused-but-set-parameter")
 
 # SIMD OpenMP

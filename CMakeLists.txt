@@ -19,14 +19,14 @@ endif()
 #   CMake settings
 #
 ################################################################################
+set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake/Modules ${CMAKE_MODULE_PATH})
+
+include(ConfigureVersion)
 cmake_policy(SET CMP0048 NEW)
 cmake_policy(SET CMP0042 NEW)
 cmake_policy(SET CMP0053 NEW)
 
-project(tomopy LANGUAGES C CXX)
-
-set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake/Modules ${CMAKE_MODULE_PATH})
-set(CMAKE_INSTALL_DEFAULT_COMPONENT_NAME python)
+project(tomopy LANGUAGES C CXX VERSION ${tomopy_VERSION})
 
 ################################################################################
 

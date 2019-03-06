@@ -39,6 +39,10 @@ include(CheckCXXSourceCompiles)
 include(CheckCXXSourceRuns)
 
 
+# the languages enabled for project
+get_property(${PROJECT_NAME}_LANGUAGES GLOBAL PROPERTY ENABLED_LANGUAGES)
+
+
 ################################################################################
 # macro converting string to list
 ################################################################################
@@ -125,6 +129,10 @@ endmacro()
 # determine compiler types for each language
 ################################################################################
 foreach(LANG C CXX)
+
+    if(NOT "${LANG}" IN_LIST ${PROJECT_NAME}_LANGUAGES)
+        continue()
+    endif()
 
     macro(SET_COMPILER_VAR VAR _BOOL)
         set(CMAKE_${LANG}_COMPILER_IS_${VAR} ${_BOOL} CACHE BOOL

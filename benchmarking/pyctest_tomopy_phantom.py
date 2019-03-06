@@ -1,6 +1,51 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+# #########################################################################
+# Copyright (c) 2019, UChicago Argonne, LLC. All rights reserved.         #
+#                                                                         #
+# Copyright 2019. UChicago Argonne, LLC. This software was produced       #
+# under U.S. Government contract DE-AC02-06CH11357 for Argonne National   #
+# Laboratory (ANL), which is operated by UChicago Argonne, LLC for the    #
+# U.S. Department of Energy. The U.S. Government has rights to use,       #
+# reproduce, and distribute this software.  NEITHER THE GOVERNMENT NOR    #
+# UChicago Argonne, LLC MAKES ANY WARRANTY, EXPRESS OR IMPLIED, OR        #
+# ASSUMES ANY LIABILITY FOR THE USE OF THIS SOFTWARE.  If software is     #
+# modified to produce derivative works, such modified software should     #
+# be clearly marked, so as not to confuse it with the version available   #
+# from ANL.                                                               #
+#                                                                         #
+# Additionally, redistribution and use in source and binary forms, with   #
+# or without modification, are permitted provided that the following      #
+# conditions are met:                                                     #
+#                                                                         #
+#     * Redistributions of source code must retain the above copyright    #
+#       notice, this list of conditions and the following disclaimer.     #
+#                                                                         #
+#     * Redistributions in binary form must reproduce the above copyright #
+#       notice, this list of conditions and the following disclaimer in   #
+#       the documentation and/or other materials provided with the        #
+#       distribution.                                                     #
+#                                                                         #
+#     * Neither the name of UChicago Argonne, LLC, Argonne National       #
+#       Laboratory, ANL, the U.S. Government, nor the names of its        #
+#       contributors may be used to endorse or promote products derived   #
+#       from this software without specific prior written permission.     #
+#                                                                         #
+# THIS SOFTWARE IS PROVIDED BY UChicago Argonne, LLC AND CONTRIBUTORS     #
+# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT       #
+# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS       #
+# FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL UChicago     #
+# Argonne, LLC OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,        #
+# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,    #
+# BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;        #
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER        #
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT      #
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN       #
+# ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE         #
+# POSSIBILITY OF SUCH DAMAGE.                                             #
+# #########################################################################
+
 """TomoPy script to reconstruct a built-in phantom."""
 
 import sys
@@ -9,15 +54,9 @@ import argparse
 import traceback
 
 import tomopy
-import dxchange
-import tornado
-import matplotlib
 import timemory
 import timemory.options as options
-import signal
 import numpy as np
-import time as t
-import pylab
 from tomopy.misc.benchmark import *
 
 
@@ -58,8 +97,6 @@ def generate(phantom, args):
     with timemory.util.auto_timer("[tomopy.project]"):
         prj = tomopy.project(obj, ang)
 
-    print("[dims]> projection = {}, angles = {}, object = {}".format(
-        prj.shape, ang.shape, obj.shape))
     return [prj, ang, obj]
 
 
@@ -91,24 +128,16 @@ def run(phantom, algorithm, args, get_recon=False):
     if algorithm not in ["fbp", "gridrec"]:
         _kwargs["num_iter"] = args.num_iter
 
-    print("kwargs: {}".format(_kwargs))
+    print("Starting reconstruction with kwargs={}...".format(_kwargs))
     with timemory.util.auto_timer("[tomopy.recon(algorithm='{}')]".format(
                                   algorithm)):
         rec = tomopy.recon(prj, ang, **_kwargs)
-    print("completed reconstruction...")
 
-    obj_min = np.amin(obj)
-    rec_min = np.amin(rec)
-    obj_max = np.amax(obj)
-    rec_max = np.amax(rec)
-    print("obj bounds = [{:8.3f}, {:8.3f}], rec bounds = [{:8.3f}, {:8.3f}]".format(obj_min, obj_max,
-                                                              rec_min, rec_max))
+    print("obj bounds = [{:8.3f}, {:8.3f}], rec bounds = [{:8.3f}, {:8.3f}]".format(
+        np.amin(obj), np.amax(obj), np.amin(rec), np.amax(rec)))
 
     obj = normalize(obj)
     rec = normalize(rec)
-    obj_max = np.amax(obj)
-    rec_max = np.amax(rec)
-    print("Max obj = {}, rec = {}".format(obj_max, rec_max))
 
     rec = trim_border(rec, rec.shape[0],
                       rec[0].shape[0] - obj[0].shape[0],
@@ -127,7 +156,6 @@ def run(phantom, algorithm, args, get_recon=False):
 
     if get_recon is True:
         return rec
-
 
     print("oname = {}, fname = {}, dname = {}".format(oname, fname, dname))
     imgs.extend(output_images(obj, oname, args.format, args.scale, args.ncol))
@@ -296,7 +324,7 @@ if __name__ == "__main__":
         adir = os.path.join(adir, "comparison")
     else:
         adir = os.path.join(adir, args.algorithm)
-    
+
     if not args.preserve_output_dir:
         try:
             print("removing output from '{}' (if not '{}')...".format(adir, os.getcwd()))
@@ -308,7 +336,7 @@ if __name__ == "__main__":
             pass
     else:
         os.makedirs(adir)
-        
+
     ret = 0
     try:
         with timemory.util.timer('\nTotal time for "{}"'.format(__file__)):

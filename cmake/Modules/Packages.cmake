@@ -33,12 +33,14 @@ endif()
 find_package(PythonInterp)
 if(PYTHON_EXECUTABLE)
     get_filename_component(PYTHON_ROOT_DIR ${PYTHON_EXECUTABLE} DIRECTORY)
-    get_filename_component(PYTHON_ROOT_DIR ${PYTHON_ROOT_DIR} DIRECTORY)
-    set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH}
-        ${PYTHON_ROOT_DIR}
-        ${PYTHON_ROOT_DIR}/bin
-        ${PYTHON_ROOT_DIR}/lib
-        ${PYTHON_ROOT_DIR}/include)
+    if(UNIX)
+        get_filename_component(PYTHON_ROOT_DIR ${PYTHON_ROOT_DIR} DIRECTORY)
+    endif()
+    list(APPEND CMAKE_PREFIX_PATH
+        ${PYTHON_ROOT_DIR}              # common path for UNIX
+        ${PYTHON_ROOT_DIR}/Library      # common path for Windows
+        $ENV{CONDA_PREFIX}              # fallback if set
+    )
 endif()
 
 
