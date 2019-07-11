@@ -12,12 +12,12 @@ find_program(CLANG_FORMATTER
         clang-format)
 
 if(CLANG_FORMATTER)
-    file(GLOB headers
+    file(GLOB_RECURSE headers
         ${PROJECT_SOURCE_DIR}/source/include/*.h
         ${PROJECT_SOURCE_DIR}/source/include/*.h
         ${PROJECT_SOURCE_DIR}/source/include/*.hh
         ${PROJECT_SOURCE_DIR}/source/include/*.hpp)
-    file(GLOB sources
+    file(GLOB_RECURSE sources
         ${PROJECT_SOURCE_DIR}/source/c/*.c
         ${PROJECT_SOURCE_DIR}/source/cxx/*.cc
         ${PROJECT_SOURCE_DIR}/source/cxx/*.cpp

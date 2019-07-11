@@ -51,7 +51,7 @@ BEGIN_EXTERN_C
 END_EXTERN_C
 
 //--------------------------------------------------------------------------------------//
-
+/*
 #define CPU_NN CV_INTER_NN
 #define CPU_LINEAR CV_INTER_LINEAR
 #define CPU_AREA CV_INTER_AREA
@@ -184,40 +184,21 @@ cxx_compute_sum_dist(int dy, int dt, int dx, int nx, int ny, const float* theta)
 
     return sum_dist;
 }
-
+*/
 //======================================================================================//
 //
 #if defined(TOMOPY_USE_CUDA)
-
-//======================================================================================//
-// interpolation types
-#    define GPU_NN NPPI_INTER_NN
-#    define GPU_LINEAR NPPI_INTER_LINEAR
-#    define GPU_CUBIC NPPI_INTER_CUBIC
-
-//======================================================================================//
-
-inline int
-GetNppInterpolationMode(const std::string& preferred)
-{
-    EnvChoiceList<int> choices = {
-        EnvChoice<int>(GPU_NN, "NN", "nearest neighbor interpolation"),
-        EnvChoice<int>(GPU_LINEAR, "LINEAR", "bilinear interpolation"),
-        EnvChoice<int>(GPU_CUBIC, "CUBIC", "bicubic interpolation")
-    };
-    return GetChoice<int>(choices, preferred);
-}
 
 //======================================================================================//
 //
 #    if defined(__NVCC__)
 //
 //======================================================================================//
-
+/*
 inline int
 GetBlockSize(const int& init = 32)
 {
-    static thread_local int _instance = GetEnv<int>("TOMOPY_BLOCK_SIZE", init);
+    static thread_local int _instance = get_env<int>("TOMOPY_BLOCK_SIZE", init);
     return _instance;
 }
 
@@ -227,7 +208,7 @@ inline int
 GetGridSize(const int& init = 0)
 {
     // default value of zero == calculated according to block and loop size
-    static thread_local int _instance = GetEnv<int>("TOMOPY_GRID_SIZE", init);
+    static thread_local int _instance = get_env<int>("TOMOPY_GRID_SIZE", init);
     return _instance;
 }
 
@@ -244,9 +225,9 @@ ComputeGridSize(const int& size, const int& block_size = GetBlockSize())
 inline dim3
 GetBlockDims(const dim3& init = dim3(32, 32, 1))
 {
-    int _x = GetEnv<int>("TOMOPY_BLOCK_SIZE_X", init.x);
-    int _y = GetEnv<int>("TOMOPY_BLOCK_SIZE_Y", init.y);
-    int _z = GetEnv<int>("TOMOPY_BLOCK_SIZE_Z", init.z);
+    int _x = get_env<int>("TOMOPY_BLOCK_SIZE_X", init.x);
+    int _y = get_env<int>("TOMOPY_BLOCK_SIZE_Y", init.y);
+    int _z = get_env<int>("TOMOPY_BLOCK_SIZE_Z", init.z);
     return dim3(_x, _y, _z);
 }
 
@@ -256,9 +237,9 @@ inline dim3
 GetGridDims(const dim3& init = dim3(0, 0, 0))
 {
     // default value of zero == calculated according to block and loop size
-    int _x = GetEnv<int>("TOMOPY_GRID_SIZE_X", init.x);
-    int _y = GetEnv<int>("TOMOPY_GRID_SIZE_Y", init.y);
-    int _z = GetEnv<int>("TOMOPY_GRID_SIZE_Z", init.z);
+    int _x = get_env<int>("TOMOPY_GRID_SIZE_X", init.x);
+    int _y = get_env<int>("TOMOPY_GRID_SIZE_Y", init.y);
+    int _z = get_env<int>("TOMOPY_GRID_SIZE_Z", init.z);
     return dim3(_x, _y, _z);
 }
 
@@ -296,7 +277,7 @@ inline void
 event_sync(cudaEvent_t _event)
 {
     cudaEventSynchronize(_event);
-    CUDA_CHECK_LAST_ERROR();
+    //CUDA_CHECK_LAST_ERROR();
 }
 
 //======================================================================================//
@@ -327,7 +308,7 @@ void
 cpu2gpu_memcpy(_Tp* _gpu, const _Tp* _cpu, uintmax_t size, cudaStream_t stream)
 {
     cudaMemcpyAsync(_gpu, _cpu, size * sizeof(_Tp), cudaMemcpyHostToDevice, stream);
-    CUDA_CHECK_LAST_STREAM_ERROR(stream);
+    CUDA_CHECK_LAST_ERROR(stream);
 }
 
 //--------------------------------------------------------------------------------------//
@@ -337,7 +318,7 @@ void
 gpu2cpu_memcpy(_Tp* _cpu, const _Tp* _gpu, uintmax_t size, cudaStream_t stream)
 {
     cudaMemcpyAsync(_cpu, _gpu, size * sizeof(_Tp), cudaMemcpyDeviceToHost, stream);
-    CUDA_CHECK_LAST_STREAM_ERROR(stream);
+    CUDA_CHECK_LAST_ERROR(stream);
 }
 
 //--------------------------------------------------------------------------------------//
@@ -347,7 +328,7 @@ void
 gpu2gpu_memcpy(_Tp* _dst, const _Tp* _src, uintmax_t size, cudaStream_t stream)
 {
     cudaMemcpyAsync(_dst, _src, size * sizeof(_Tp), cudaMemcpyDeviceToDevice, stream);
-    CUDA_CHECK_LAST_STREAM_ERROR(stream);
+    CUDA_CHECK_LAST_ERROR(stream);
 }
 
 //--------------------------------------------------------------------------------------//
@@ -357,7 +338,7 @@ void
 gpu_memset(_Tp* _gpu, int value, uintmax_t size, cudaStream_t stream)
 {
     cudaMemsetAsync(_gpu, value, size * sizeof(_Tp), stream);
-    CUDA_CHECK_LAST_STREAM_ERROR(stream);
+    CUDA_CHECK_LAST_ERROR(stream);
 }
 
 //======================================================================================//
@@ -368,7 +349,7 @@ gpu_malloc_and_memcpy(const _Tp* _cpu, uintmax_t size, cudaStream_t stream)
 {
     _Tp* _gpu = gpu_malloc<_Tp>(size);
     cudaMemcpyAsync(_gpu, _cpu, size * sizeof(_Tp), cudaMemcpyHostToDevice, stream);
-    CUDA_CHECK_LAST_STREAM_ERROR(stream);
+    CUDA_CHECK_LAST_ERROR(stream);
     return _gpu;
 }
 
@@ -380,7 +361,7 @@ gpu_malloc_and_memset(uintmax_t size, int value, cudaStream_t stream)
 {
     _Tp* _gpu = gpu_malloc<_Tp>(size);
     cudaMemsetAsync(_gpu, value, size * sizeof(_Tp), stream);
-    CUDA_CHECK_LAST_STREAM_ERROR(stream);
+    CUDA_CHECK_LAST_ERROR(stream);
     return _gpu;
 }
 
@@ -391,21 +372,21 @@ void
 gpu2cpu_memcpy_and_free(_Tp* _cpu, _Tp* _gpu, uintmax_t size, cudaStream_t stream)
 {
     cudaMemcpyAsync(_cpu, _gpu, size * sizeof(_Tp), cudaMemcpyDeviceToHost, stream);
-    CUDA_CHECK_LAST_STREAM_ERROR(stream);
+    CUDA_CHECK_LAST_ERROR(stream);
     cudaFree(_gpu);
-    CUDA_CHECK_LAST_ERROR();
+    //CUDA_CHECK_LAST_ERROR();
 }
 
 //======================================================================================//
 
 inline cudaStream_t*
-create_streams(const int nstreams, unsigned int flag = cudaStreamDefault)
+stream_create(const int nstreams, unsigned int flag = cudaStreamDefault)
 {
     cudaStream_t* streams = new cudaStream_t[nstreams];
     for(int i = 0; i < nstreams; ++i)
     {
         cudaStreamCreateWithFlags(&streams[i], flag);
-        CUDA_CHECK_LAST_STREAM_ERROR(streams[i]);
+        CUDA_CHECK_LAST_ERROR(streams[i]);
     }
     return streams;
 }
@@ -413,18 +394,18 @@ create_streams(const int nstreams, unsigned int flag = cudaStreamDefault)
 //======================================================================================//
 
 inline void
-destroy_streams(cudaStream_t* streams, const int nstreams)
+stream_destroy(cudaStream_t* streams, const int nstreams)
 {
     for(int i = 0; i < nstreams; ++i)
     {
         cudaStreamSynchronize(streams[i]);
-        CUDA_CHECK_LAST_STREAM_ERROR(streams[i]);
+        CUDA_CHECK_LAST_ERROR(streams[i]);
         cudaStreamDestroy(streams[i]);
-        CUDA_CHECK_LAST_ERROR();
+        //CUDA_CHECK_LAST_ERROR();
     }
     delete[] streams;
 }
-
+*/
 //======================================================================================//
 // compute the sum_dist for the rotations
 

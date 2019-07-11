@@ -37,9 +37,11 @@
 //  ---------------------------------------------------------------
 //   TOMOPY CUDA implementation
 
+#include "backend/cuda.hh"
 #include "common.hh"
 #include "macros.hh"
 #include "utils.hh"
+
 
 //======================================================================================//
 
@@ -65,42 +67,42 @@ init_nvtx()
     nvtx_total.version       = NVTX_VERSION;
     nvtx_total.size          = NVTX_EVENT_ATTRIB_STRUCT_SIZE;
     nvtx_total.colorType     = NVTX_COLOR_ARGB;
-    nvtx_total.color         = 0xff0000ff; /* blue? */
+    nvtx_total.color         = 0xff0000ff; // blue?
     nvtx_total.messageType   = NVTX_MESSAGE_TYPE_ASCII;
     nvtx_total.message.ascii = "total time for all iterations";
 
     nvtx_iteration.version       = NVTX_VERSION;
     nvtx_iteration.size          = NVTX_EVENT_ATTRIB_STRUCT_SIZE;
     nvtx_iteration.colorType     = NVTX_COLOR_ARGB;
-    nvtx_iteration.color         = 0xffffff00; /* yellow */
+    nvtx_iteration.color         = 0xffffff00; // yellow
     nvtx_iteration.messageType   = NVTX_MESSAGE_TYPE_ASCII;
     nvtx_iteration.message.ascii = "time per iteration";
 
     nvtx_slice.version       = NVTX_VERSION;
     nvtx_slice.size          = NVTX_EVENT_ATTRIB_STRUCT_SIZE;
     nvtx_slice.colorType     = NVTX_COLOR_ARGB;
-    nvtx_slice.color         = 0xff00ffff; /* cyan */
+    nvtx_slice.color         = 0xff00ffff; // cyan
     nvtx_slice.messageType   = NVTX_MESSAGE_TYPE_ASCII;
     nvtx_slice.message.ascii = "time per slice";
 
     nvtx_projection.version       = NVTX_VERSION;
     nvtx_projection.size          = NVTX_EVENT_ATTRIB_STRUCT_SIZE;
     nvtx_projection.colorType     = NVTX_COLOR_ARGB;
-    nvtx_projection.color         = 0xff00ffff; /* pink */
+    nvtx_projection.color         = 0xff00ffff; // pink
     nvtx_projection.messageType   = NVTX_MESSAGE_TYPE_ASCII;
     nvtx_projection.message.ascii = "time per projection";
 
     nvtx_update.version       = NVTX_VERSION;
     nvtx_update.size          = NVTX_EVENT_ATTRIB_STRUCT_SIZE;
     nvtx_update.colorType     = NVTX_COLOR_ARGB;
-    nvtx_update.color         = 0xff99ff99; /* light green */
+    nvtx_update.color         = 0xff99ff99; // light green
     nvtx_update.messageType   = NVTX_MESSAGE_TYPE_ASCII;
     nvtx_update.message.ascii = "time updating";
 
     nvtx_rotate.version       = NVTX_VERSION;
     nvtx_rotate.size          = NVTX_EVENT_ATTRIB_STRUCT_SIZE;
     nvtx_rotate.colorType     = NVTX_COLOR_ARGB;
-    nvtx_rotate.color         = 0xff0000ff; /* blue? */
+    nvtx_rotate.color         = 0xff0000ff; // blue?
     nvtx_rotate.messageType   = NVTX_MESSAGE_TYPE_ASCII;
     nvtx_rotate.message.ascii = "time rotating";
 }
@@ -109,135 +111,10 @@ init_nvtx()
 
 //======================================================================================//
 
-int
-cuda_set_device(int device)
-{
-    int deviceCount = cuda_device_count();
-    if(deviceCount == 0)
-        return -1;
-
-    // don't set to higher than number of devices
-    device = device % deviceCount;
-    // update thread-static variable
-    this_thread_device() = device;
-    // actually set the device
-    cudaSetDevice(device);
-    // return the modulus
-    return device;
-}
-
-//======================================================================================//
-
-int
-cuda_multi_processor_count()
-{
-    if(cuda_device_count() == 0)
-        return 0;
-
-    // keep from querying device
-    static thread_local cuda_device_info<int>* _instance = new cuda_device_info<int>();
-    // use the thread assigned devices
-    int device = this_thread_device();
-
-    if(_instance->find(device) != _instance->end())
-        return _instance->find(device)->second;
-
-    cudaSetDevice(device);
-    cudaDeviceProp deviceProp;
-    cudaGetDeviceProperties(&deviceProp, device);
-
-    return ((*_instance)[device] = deviceProp.multiProcessorCount);
-}
-
-//======================================================================================//
-
-int
-cuda_max_threads_per_block()
-{
-    if(cuda_device_count() == 0)
-        return 0;
-
-    // keep from querying device
-    static thread_local cuda_device_info<int>* _instance = new cuda_device_info<int>();
-    // use the thread assigned devices
-    int device = this_thread_device();
-
-    if(_instance->find(device) != _instance->end())
-        return _instance->find(device)->second;
-
-    cudaSetDevice(device);
-    cudaDeviceProp deviceProp;
-    cudaGetDeviceProperties(&deviceProp, device);
-
-    return ((*_instance)[device] = deviceProp.maxThreadsPerBlock);
-}
-
-//======================================================================================//
-
-int
-cuda_warp_size()
-{
-    if(cuda_device_count() == 0)
-        return 0;
-
-    // keep from querying device
-    static thread_local cuda_device_info<int>* _instance = new cuda_device_info<int>();
-    // use the thread assigned devices
-    int device = this_thread_device();
-
-    if(_instance->find(device) != _instance->end())
-        return _instance->find(device)->second;
-
-    cudaSetDevice(device);
-    cudaDeviceProp deviceProp;
-    cudaGetDeviceProperties(&deviceProp, device);
-
-    return ((*_instance)[device] = deviceProp.warpSize);
-}
-
-//======================================================================================//
-
-int
-cuda_shared_memory_per_block()
-{
-    if(cuda_device_count() == 0)
-        return 0;
-
-    // keep from querying device
-    static thread_local cuda_device_info<int>* _instance = new cuda_device_info<int>();
-    // use the thread assigned devices
-    int device = this_thread_device();
-
-    if(_instance->find(device) != _instance->end())
-        return _instance->find(device)->second;
-
-    cudaSetDevice(device);
-    cudaDeviceProp deviceProp;
-    cudaGetDeviceProperties(&deviceProp, device);
-
-    return ((*_instance)[device] = deviceProp.sharedMemPerBlock);
-}
-
-//======================================================================================//
-
-int
-cuda_device_count()
-{
-    int         deviceCount = 0;
-    cudaError_t error_id    = cudaGetDeviceCount(&deviceCount);
-
-    if(error_id != cudaSuccess)
-        return 0;
-
-    return deviceCount;
-}
-
-//======================================================================================//
-
 void
-cuda_device_query()
+cuda::device_query()
 {
-    auto pythreads = GetEnv("TOMOPY_PYTHON_THREADS", HW_CONCURRENCY);
+    auto pythreads = get_env("TOMOPY_PYTHON_THREADS", HW_CONCURRENCY);
     static std::atomic<int16_t> _once;
     auto                        _count = _once++;
     if(_count + 1 == pythreads)

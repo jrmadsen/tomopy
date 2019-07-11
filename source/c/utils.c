@@ -42,6 +42,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include "utils.h"
+#include "macros.h"
 #include <float.h>
 #include <stdint.h>
 
@@ -50,13 +51,11 @@
 #    ifdef PY3K
 void
 PyInit_libtomopy(void)
-{
-}
+{}
 #    else
 void
 initlibtomopy(void)
-{
-}
+{}
 #    endif
 #endif
 
@@ -124,12 +123,12 @@ calc_coords(int ry, int rz, float xi, float yi, float sin_p, float cos_p,
     float slope  = (srcy - dety) / (srcx - detx);
     float islope = (srcx - detx) / (srcy - dety);
 
-#pragma omp simd
+    PRAGMA_SIMD
     for(int n = 0; n <= rz; ++n)
     {
         coordx[n] = islope * (gridy[n] - srcy) + srcx;
     }
-#pragma omp simd
+    PRAGMA_SIMD
     for(int n = 0; n <= ry; ++n)
     {
         coordy[n] = slope * (gridx[n] - srcx) + srcy;
@@ -270,19 +269,19 @@ calc_dist(int ry, int rz, int csize, const float* coorx, const float* coory, int
         float* _diffx = malloc(_size * sizeof(float));
         float* _diffy = malloc(_size * sizeof(float));
 
-#pragma omp simd
+        PRAGMA_SIMD
         for(int n = 0; n < _size; ++n)
         {
             _diffx[n] = (coorx[n + 1] - coorx[n]) * (coorx[n + 1] - coorx[n]);
         }
 
-#pragma omp simd
+        PRAGMA_SIMD
         for(int n = 0; n < _size; ++n)
         {
             _diffy[n] = (coory[n + 1] - coory[n]) * (coory[n + 1] - coory[n]);
         }
 
-#pragma omp simd
+        PRAGMA_SIMD
         for(int n = 0; n < _size; ++n)
         {
             dist[n] = sqrtf(_diffx[n] + _diffy[n]);
@@ -299,7 +298,7 @@ calc_dist(int ry, int rz, int csize, const float* coorx, const float* coory, int
     int* _indx = malloc(_size * sizeof(int));
     int* _indy = malloc(_size * sizeof(int));
 
-#pragma omp simd
+    PRAGMA_SIMD
     for(int n = 0; n < _size; ++n)
     {
         float _midx = 0.5f * (coorx[n + 1] + coorx[n]);
@@ -307,7 +306,7 @@ calc_dist(int ry, int rz, int csize, const float* coorx, const float* coory, int
         float _i1   = (int) (_midx + 0.5f * ry);
         _indx[n]    = _i1 - (_i1 > _x1);
     }
-#pragma omp simd
+    PRAGMA_SIMD
     for(int n = 0; n < _size; ++n)
     {
         float _midy = 0.5f * (coory[n + 1] + coory[n]);
@@ -315,7 +314,7 @@ calc_dist(int ry, int rz, int csize, const float* coorx, const float* coory, int
         float _i2   = (int) (_midy + 0.5f * rz);
         _indy[n]    = _i2 - (_i2 > _x2);
     }
-#pragma omp simd
+    PRAGMA_SIMD
     for(int n = 0; n < _size; ++n)
     {
         indi[n] = _indy[n] + (_indx[n] * rz);
@@ -331,7 +330,7 @@ void
 calc_dist2(int ry, int rz, int csize, const float* coorx, const float* coory, int* indx,
            int* indy, float* dist)
 {
-#pragma omp simd
+    PRAGMA_SIMD
     for(int n = 0; n < csize - 1; ++n)
     {
         float diffx = coorx[n + 1] - coorx[n];
@@ -339,7 +338,7 @@ calc_dist2(int ry, int rz, int csize, const float* coorx, const float* coory, in
         dist[n]     = sqrt(diffx * diffx + diffy * diffy);
     }
 
-#pragma omp simd
+    PRAGMA_SIMD
     for(int n = 0; n < csize - 1; ++n)
     {
         float midx = (coorx[n + 1] + coorx[n]) * 0.5f;

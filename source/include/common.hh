@@ -40,77 +40,21 @@
 #pragma once
 
 #include "constants.hh"
+#include "environment.hh"
 #include "macros.hh"
 #include "typedefs.hh"
+
+#include "backend/opencv.hh"
+#if defined(TOMOPY_USE_CUDA)
+#    include "backend/cuda.hh"
+#endif
 
 BEGIN_EXTERN_C
 #include "cxx_extern.h"
 END_EXTERN_C
 
-//======================================================================================//
-//
-//  The following section provides functions for the initialization of the tasking library
-//
-//======================================================================================//
-
-// get a unique pointer to a thread-pool
-//
-inline void
-CreateThreadPool(unique_thread_pool_t& tp, num_threads_t& pool_size)
-{
-    auto min_threads = num_threads_t(1);
-    if(pool_size <= 0)
-    {
-#if defined(TOMOPY_USE_PTL)
-        // compute some properties (expected python threads, max threads)
-        auto pythreads = GetEnv("TOMOPY_PYTHON_THREADS", HW_CONCURRENCY);
-#    if defined(TOMOPY_USE_CUDA)
-        // general oversubscription when CUDA is enabled
-        auto max_threads =
-            (HW_CONCURRENCY + HW_CONCURRENCY) / std::max(pythreads, min_threads);
-#    else
-        // if known that CPU only, just try to use all cores
-        auto max_threads = HW_CONCURRENCY / std::max(pythreads, min_threads);
-#    endif
-        auto nthreads = std::max(GetEnv("TOMOPY_NUM_THREADS", max_threads), min_threads);
-        pool_size     = nthreads;
-#else
-        pool_size = 1;
-#endif
-    }
-    // always specify at least one thread even if not creating threads
-    pool_size = std::max(pool_size, min_threads);
-
-    // explicitly set number of threads to 0 so OpenCV doesn't try to create threads
-    cv::setNumThreads(0);
-
-    // use unique pointer per-thread so manager gets deleted when thread gets deleted
-    // create the thread-pool instance
-    tp = unique_thread_pool_t(new tomopy::ThreadPool(pool_size));
-
-#if defined(TOMOPY_USE_PTL)
-    // ensure this thread is assigned id, assign variable so no unused result warning
-    auto tid = GetThisThreadID();
-
-    // initialize the thread-local data information
-    auto& thread_data = ThreadData::GetInstance();
-    if(!thread_data)
-        thread_data.reset(new ThreadData(tp.get()));
-
-    // tell thread that initialized thread-pool to process tasks
-    // (typically master thread will only wait for other threads)
-    thread_data->is_master = true;
-
-    // tell thread that it is not currently within task
-    thread_data->within_task = false;
-
-    // notify
-    AutoLock l(TypeMutex<decltype(std::cout)>());
-    std::cout << "\n"
-              << "[" << tid << "] Initialized tasking run manager with " << tp->size()
-              << " threads..." << std::endl;
-#endif
-}
+#include <algorithm>
+#include <deque>
 
 //======================================================================================//
 //  This class enables the selection of a device at runtime
@@ -129,8 +73,7 @@ public:
     : index(_idx)
     , key(_key)
     , description(_desc)
-    {
-    }
+    {}
 
     static void spacer(std::ostream& os, const char c = '-')
     {
@@ -198,7 +141,7 @@ public:
     inline static std::string tolower(std::string val)
     {
         for(auto& itr : val)
-            itr = scast<char>(::tolower(itr));
+            itr = static_cast<char>(::tolower(itr));
         return val;
     }
 
@@ -238,13 +181,13 @@ public:
 inline DeviceOption
 GetDevice(const std::string& preferred)
 {
-    auto pythreads               = GetEnv("TOMOPY_PYTHON_THREADS", HW_CONCURRENCY);
+    auto pythreads               = get_env("TOMOPY_PYTHON_THREADS", HW_CONCURRENCY);
     using DeviceOptionList       = std::deque<DeviceOption>;
     DeviceOptionList options     = { DeviceOption(0, "cpu", "Run on CPU (OpenCV)") };
     std::string      default_key = "cpu";
 
 #if defined(TOMOPY_USE_CUDA)
-    auto num_devices = cuda_device_count();
+    auto num_devices = cuda::device_count();
     if(num_devices > 0)
     {
         options.push_back(DeviceOption(1, "gpu", "Run on GPU (CUDA NPP)"));
@@ -254,7 +197,7 @@ GetDevice(const std::string& preferred)
         init_nvtx();
 #    endif
         // print device info
-        cuda_device_query();
+        cuda::device_query();
     }
     else
     {
@@ -337,19 +280,6 @@ GetDevice(const std::string& preferred)
     print_selection(*selection);
 
     return *selection;
-}
-
-//======================================================================================//
-// synchronize a CUDA stream
-inline void
-stream_sync(cudaStream_t _stream)
-{
-#if defined(__NVCC__) && defined(TOMOPY_USE_CUDA)
-    cudaStreamSynchronize(_stream);
-    CUDA_CHECK_LAST_STREAM_ERROR(_stream);
-#else
-    ConsumeParameters(_stream);
-#endif
 }
 
 //======================================================================================//

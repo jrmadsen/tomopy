@@ -34,52 +34,29 @@
 //  LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
 //  ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 //  POSSIBILITY OF SUCH DAMAGE.
-//  ---------------------------------------------------------------
-//   TOMOPY header
-
-/** \file cxx_extern.h
- * \headerfile cxx_extern.h "include/cxx_extern.h"
- * C++ functions that are available to C code (available for Python binding)
- */
+// ---------------------------------------------------------------
+//  TOMOPY class header
+//
 
 #pragma once
 
-#include "macros.h"
+#if defined(__NVCC__)
+#    include <cuda.h>
+#    include <cuda_runtime_api.h>
 
-//======================================================================================//
+#    define HOST_DEVICE_CALLABLE __host__ __device__
+#    define DEVICE_CALLABLE __device__
+#    define GLOBAL_CALLABLE __global__
+#else
+#    define HOST_DEVICE_CALLABLE
+#    define DEVICE_CALLABLE
+#    define GLOBAL_CALLABLE
+#endif
 
-BEGIN_EXTERN_C
-
-//======================================================================================//
-//
-//  MLEM
-//
-//======================================================================================//
-
-// generic decision of whether to use CPU or GPU version
-//     NOTE: if compiled with GPU support but no devices, will call CPU version
-DLL int
-cxx_mlem(const float* data, int dy, int dt, int dx, const float* center,
-         const float* theta, float* recon, int ngridx, int ngridy, int num_iter,
-         int pool_size, const char* interp, const char* device, int* grid_size,
-         int* block_size);
-
-//======================================================================================//
-//
-//  SIRT
-//
-//======================================================================================//
-
-// generic decision of whether to use CPU or GPU version
-//     NOTE: if compiled with GPU support but no devices, will call CPU version
-DLL int
-cxx_sirt(const float* data, int dy, int dt, int dx, const float* center,
-         const float* theta, float* recon, int ngridx, int ngridy, int num_iter,
-         int pool_size, const char* interp, const char* device, int* grid_size,
-         int* block_size);
-
-//======================================================================================//
-
-END_EXTERN_C
-
-//======================================================================================//
+namespace device
+{
+struct cpu
+{};
+struct gpu
+{};
+}  // namespace device

@@ -48,7 +48,7 @@
 #include <cstdlib>
 #include <memory>
 #include <numeric>
-
+/*
 //======================================================================================//
 
 #if defined(TOMOPY_USE_NVTX)
@@ -96,7 +96,8 @@ cuda_sirt_update_kernel(float* recon, const float* update, const uint32_t* sum_d
     for(int i = i0; i < size; i += istride)
     {
         if(sum_dist[i] != 0 && dx != 0 && update[i] == update[i])
-            recon[i] += update[i] / scast<float>(sum_dist[i]) / scast<float>(dx);
+            recon[i] += update[i] / static_cast<float>(sum_dist[i]) /
+static_cast<float>(dx);
     }
 }
 
@@ -106,7 +107,7 @@ void
 sirt_gpu_compute_projection(data_array_t& gpu_data, int p, int dy, int dt, int dx, int nx,
                             int ny, const float* theta)
 {
-    auto cache = gpu_data[GetThisThreadID() % gpu_data.size()];
+    auto cache = gpu_data[this_thread_id() % gpu_data.size()];
 
     // ensure running on proper device
     cuda_set_device(cache->device());
@@ -136,20 +137,20 @@ sirt_gpu_compute_projection(data_array_t& gpu_data, int p, int dy, int dt, int d
         // forward-rotate
         cuda_rotate_ip(rot, recon, -theta_p_rad, -theta_p_deg, nx, ny, stream,
                        cache->interpolation());
-        CUDA_CHECK_LAST_STREAM_ERROR(stream);
+        CUDA_CHECK_LAST_ERROR(stream);
 
         // compute simdata
         cuda_sirt_pixels_kernel<<<grid, block, 0, stream>>>(p, nx, dx, rot, data);
-        CUDA_CHECK_LAST_STREAM_ERROR(stream);
+        CUDA_CHECK_LAST_ERROR(stream);
 
         // back-rotate
         cuda_rotate_ip(tmp, rot, theta_p_rad, theta_p_deg, nx, ny, stream,
                        cache->interpolation());
-        CUDA_CHECK_LAST_STREAM_ERROR(stream);
+        CUDA_CHECK_LAST_ERROR(stream);
 
         // update shared update array
         cuda_atomic_sum_kernel<<<grid, block, 0, stream>>>(update, tmp, nx * ny, 1.0f);
-        CUDA_CHECK_LAST_STREAM_ERROR(stream);
+        CUDA_CHECK_LAST_ERROR(stream);
 
         // synchronize the stream (do this frequently to avoid backlog)
         stream_sync(stream);
@@ -164,7 +165,7 @@ sirt_cuda(const float* cpu_data, int dy, int dt, int dx, const float* center,
           RuntimeOptions* opts)
 {
     printf("[%lu]> %s : nitr = %i, dy = %i, dt = %i, dx = %i, nx = %i, ny = %i\n",
-           GetThisThreadID(), __FUNCTION__, num_iter, dy, dt, dx, ngridx, ngridy);
+           this_thread_id(), __FUNCTION__, num_iter, dy, dt, dx, ngridx, ngridy);
 
     // thread counter for device assignment
     static std::atomic<int> ntid;
@@ -177,12 +178,12 @@ sirt_cuda(const float* cpu_data, int dy, int dt, int dx, const float* center,
 
     // GPU allocated copies
     cuda_set_device(device);
-    printf("[%lu] Running on device %i...\n", GetThisThreadID(), device);
+    printf("[%lu] Running on device %i...\n", this_thread_id(), device);
 
-    uintmax_t    recon_pixels = scast<uintmax_t>(dy * ngridx * ngridy);
+    uintmax_t    recon_pixels = static_cast<uintmax_t>(dy * ngridx * ngridy);
     auto         block        = opts->block_size[0];
     auto         grid         = ComputeGridSize(recon_pixels, block);
-    auto         main_stream  = create_streams(1);
+    auto         main_stream  = stream_create(1);
     float*       update    = gpu_malloc_and_memset<float>(recon_pixels, 0, *main_stream);
     init_data_t  init_data = GpuData::initialize(opts, device, dy, dt, dx, ngridx, ngridy,
                                                 cpu_recon, cpu_data, update);
@@ -191,13 +192,13 @@ sirt_cuda(const float* cpu_data, int dy, int dt, int dx, const float* center,
     float*       data      = std::get<2>(init_data);
     uint32_t*    sum_dist  = cuda_compute_sum_dist(dy, dt, dx, ngridx, ngridy, theta);
 
-    NVTX_RANGE_PUSH(&nvtx_total);
+    TOMOPY_NVXT_RANGE_PUSH(&nvtx_total);
 
     for(int i = 0; i < num_iter; i++)
     {
         // timing and profiling
         TIMEMORY_AUTO_TIMER("");
-        NVTX_RANGE_PUSH(&nvtx_iteration);
+        TOMOPY_NVXT_RANGE_PUSH(&nvtx_iteration);
         START_TIMER(t_start);
 
         // sync the main stream
@@ -224,7 +225,7 @@ sirt_cuda(const float* cpu_data, int dy, int dt, int dx, const float* center,
                                                                   dx, recon_pixels);
 
         // stop profile range and report timing
-        NVTX_RANGE_POP(0);
+        TOMOPY_NVXT_RANGE_POP(0);
         REPORT_TIMER(t_start, "iteration", i, num_iter);
     }
 
@@ -232,7 +233,7 @@ sirt_cuda(const float* cpu_data, int dy, int dt, int dx, const float* center,
     gpu2cpu_memcpy<float>(cpu_recon, recon, recon_pixels, *main_stream);
 
     // sync and destroy main stream
-    destroy_streams(main_stream, 1);
+    stream_destroy(main_stream, 1);
 
     // cleanup
     cudaFree(recon);
@@ -240,10 +241,11 @@ sirt_cuda(const float* cpu_data, int dy, int dt, int dx, const float* center,
     cudaFree(update);
     cudaFree(sum_dist);
 
-    NVTX_RANGE_POP(0);
+    TOMOPY_NVXT_RANGE_POP(0);
 
     // sync the device
     cudaDeviceSynchronize();
 }
 
 //======================================================================================//
+*/

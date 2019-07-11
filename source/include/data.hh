@@ -46,29 +46,34 @@
 
 #pragma once
 
+#include "backend/opencv.hh"
 #include "common.hh"
 #include "constants.hh"
 #include "macros.hh"
 #include "typedefs.hh"
 #include "utils.hh"
 
+#if defined(TOMOPY_USE_CUDA)
+#    include "backend/cuda.hh"
+#endif
+
 #include <array>
 #include <atomic>
+#include <functional>
 
 //======================================================================================//
 
 struct RuntimeOptions
 {
-    num_threads_t        pool_size     = HW_CONCURRENCY;
-    int                  interpolation = -1;
-    DeviceOption         device;
-    std::array<int, 3>   block_size = { { 32, 32, 1 } };
-    std::array<int, 3>   grid_size  = { { 0, 0, 0 } };
-    unique_thread_pool_t thread_pool;
+    num_threads_t      pool_size     = HW_CONCURRENCY;
+    int                interpolation = -1;
+    DeviceOption       device;
+    std::array<int, 3> block_size = { { 32, 32, 1 } };
+    std::array<int, 3> grid_size  = { { 0, 0, 0 } };
 
     RuntimeOptions(int _pool_size, const char* _interp, const char* _device,
                    int* _grid_size, int* _block_size)
-    : pool_size(scast<num_threads_t>(_pool_size))
+    : pool_size(static_cast<num_threads_t>(_pool_size))
     , device(GetDevice(_device))
     {
         memcpy(grid_size.data(), _grid_size, 3 * sizeof(int));
@@ -77,14 +82,14 @@ struct RuntimeOptions
         if(device.key == "gpu")
         {
 #if defined(TOMOPY_USE_CUDA)
-            interpolation = GetNppInterpolationMode(_interp);
+            interpolation = cuda::interpolation::mode(_interp);
 #else
-            interpolation = GetOpenCVInterpolationMode(_interp);
+            interpolation = opencv::interpolation::mode(_interp);
 #endif
         }
         else
         {
-            interpolation = GetOpenCVInterpolationMode(_interp);
+            interpolation = opencv::interpolation::mode(_interp);
         }
     }
 
@@ -96,7 +101,7 @@ struct RuntimeOptions
 
     // create the thread pool -- don't have this in the constructor
     // because you don't want to arbitrarily create thread-pools
-    void init() { CreateThreadPool(thread_pool, pool_size); }
+    void init() {}
 
     // invoke the generic printer defined in common.hh
     template <typename... _Descriptions, typename... _Objects>
@@ -140,14 +145,14 @@ struct Registration
     int initialize()
     {
         // make sure this thread has a registered thread-id
-        GetThisThreadID();
+        this_thread_id();
         // count the active threads
         return active()++;
     }
 
     void cleanup(RuntimeOptions* opts)
     {
-        auto tid    = GetThisThreadID();
+        auto tid    = this_thread_id();
         auto remain = --active();
 
         if(remain == 0)
@@ -155,7 +160,7 @@ struct Registration
             std::stringstream ss;
             ss << *opts << std::endl;
 #if defined(TOMOPY_USE_CUDA)
-            for(int i = 0; i < cuda_device_count(); ++i)
+            for(int i = 0; i < cuda::device_count(); ++i)
             {
                 // set the device
                 cudaSetDevice(i);
@@ -228,7 +233,7 @@ void
 execute(RuntimeOptions* ops, int dt, DataArray& data, Func&& func, Args&&... args)
 {
     // sync streams
-    auto join = [&]() { stream_sync(0); };
+    auto join = [&]() { /*cuda::stream_sync(0);*/ };
 
     try
     {
@@ -255,7 +260,7 @@ execute(RuntimeOptions* ops, int dt, DataArray& data, Func&& func, Args&&... arg
 #endif
 
 //======================================================================================//
-
+/*
 class CpuData
 {
 public:
@@ -272,14 +277,13 @@ public:
     , m_dx(dx)
     , m_nx(nx)
     , m_ny(ny)
-    , m_rot(farray_t(scast<uintmax_t>(m_nx * m_ny), 0.0f))
-    , m_tmp(farray_t(scast<uintmax_t>(m_nx * m_ny), 0.0f))
+    , m_rot(farray_t(static_cast<uintmax_t>(m_nx * m_ny), 0.0f))
+    , m_tmp(farray_t(static_cast<uintmax_t>(m_nx * m_ny), 0.0f))
     , m_update(update)
     , m_recon(recon)
     , m_data(data)
     , m_interp(interp)
-    {
-    }
+    {}
 
     ~CpuData() {}
 
@@ -296,9 +300,9 @@ public:
 
     int interpolation() const { return m_interp; }
 
-    Mutex* upd_mutex() const
+    std::mutex* upd_mutex() const
     {
-        static Mutex mtx;
+        static std::mutex mtx;
         return &mtx;
     }
 
@@ -307,8 +311,8 @@ public:
         // reset temporaries to zero (NECESSARY!)
         // -- note: the OpenCV effectively ensures that we overwrite all values
         //          because we use cv::Mat::zeros and copy that to destination
-        memset(m_rot.data(), 0, scast<uintmax_t>(m_nx * m_ny) * sizeof(float));
-        memset(m_tmp.data(), 0, scast<uintmax_t>(m_nx * m_ny) * sizeof(float));
+        memset(m_rot.data(), 0, static_cast<uintmax_t>(m_nx * m_ny) * sizeof(float));
+        memset(m_tmp.data(), 0, static_cast<uintmax_t>(m_nx * m_ny) * sizeof(float));
     }
 
 public:
@@ -348,13 +352,13 @@ protected:
     const float* m_data;
     int          m_interp;
 };
-
+*/
 //======================================================================================//
 
 #if defined(__NVCC__) && defined(TOMOPY_USE_CUDA)
 
 //======================================================================================//
-
+/*
 class GpuData
 {
 public:
@@ -385,7 +389,7 @@ public:
     , m_interp(interp)
     {
         cuda_set_device(m_device);
-        m_streams = create_streams(m_num_streams, cudaStreamNonBlocking);
+        m_streams = stream_create(m_num_streams, cudaStreamNonBlocking);
         m_rot     = gpu_malloc<float>(m_dy * m_nx * m_ny);
         m_tmp     = gpu_malloc<float>(m_dy * m_nx * m_ny);
         CUDA_CHECK_LAST_ERROR();
@@ -395,7 +399,7 @@ public:
     {
         cudaFree(m_rot);
         cudaFree(m_tmp);
-        destroy_streams(m_streams, m_num_streams);
+        stream_destroy(m_streams, m_num_streams);
     }
 
     GpuData(const this_type&) = delete;
@@ -459,7 +463,7 @@ public:
     {
         auto      nthreads = opts->pool_size;
         uintmax_t nstreams = 2;
-        auto      streams  = create_streams(nstreams, cudaStreamNonBlocking);
+        auto      streams  = stream_create(nstreams, cudaStreamNonBlocking);
         float*    recon =
             gpu_malloc_and_memcpy<float>(cpu_recon, dy * ngridx * ngridy, streams[0]);
         float* data = gpu_malloc_and_memcpy<float>(cpu_data, dy * dt * dx, streams[1]);
@@ -472,7 +476,7 @@ public:
         }
 
         // synchronize and destroy
-        destroy_streams(streams, nstreams);
+        stream_destroy(streams, nstreams);
 
         return init_data_t(gpu_data, recon, data);
     }
@@ -511,6 +515,7 @@ protected:
     cudaStream_t* m_streams = nullptr;
     int           m_interp;
 };
+*/
 
 #endif  // NVCC and TOMOPY_USE_CUDA
 

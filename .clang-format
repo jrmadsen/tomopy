@@ -27,13 +27,13 @@ BraceWrapping:
     AfterStruct:            true
     AfterUnion:             true
     AfterExternBlock:       true
-    BeforeCatch:            false
-    BeforeElse:             false
+    BeforeCatch:            true
+    BeforeElse:             true
     IndentBraces:           false
     SplitEmptyFunction:     false
     SplitEmptyRecord:       false
     SplitEmptyNamespace:    false
-BreakBeforeBraces: Allman
+BreakBeforeBraces: Custom
 BreakBeforeInheritanceComma: true
 ColumnLimit: 90
 ConstructorInitializerAllOnOneLineOrOnePerLine: false

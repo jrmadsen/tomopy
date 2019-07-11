@@ -46,7 +46,7 @@
 
 //======================================================================================//
 
-#ifdef __cplusplus
+#if defined(__cplusplus)
 #    ifndef BEGIN_EXTERN_C
 #        define BEGIN_EXTERN_C                                                           \
             extern "C"                                                                   \
@@ -76,7 +76,7 @@
 
 //--------------------------------------------------------------------------------------//
 
-#ifdef __cplusplus
+#if defined(__cplusplus)
 #    include <cstdio>
 #    include <cstring>
 #else
@@ -88,12 +88,6 @@
 
 #if !defined(PRAGMA_SIMD)
 #    define PRAGMA_SIMD _Pragma("omp simd")
-#endif
-
-//======================================================================================//
-
-#if !defined(PRAGMA_SIMD_REDUCTION)
-#    define PRAGMA(statement) _Pragma(statement)
 #endif
 
 //======================================================================================//

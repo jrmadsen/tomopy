@@ -53,31 +53,25 @@
 #include <vector>
 
 //======================================================================================//
-// deleter class for thread-pool
-struct ThreadPoolDeleter : public std::default_delete<tomopy::ThreadPool>
-{
-    using type = tomopy::ThreadPool;
-
-    void operator()(type* ptr)
-    {
-        if(ptr)
-            ptr->destroy_threadpool();
-        delete ptr;
-    }
-};
-
-//======================================================================================//
 
 template <typename _Tp>
 using array_t = std::vector<_Tp>;
 template <typename _Tp>
 using cuda_device_info = std::unordered_map<int, _Tp>;
 
-using uarray_t             = array_t<uint32_t>;
-using iarray_t             = array_t<int32_t>;
-using farray_t             = array_t<float>;
-using darray_t             = array_t<double>;
-using num_threads_t        = decltype(std::thread::hardware_concurrency());
-using unique_thread_pool_t = std::unique_ptr<tomopy::ThreadPool, ThreadPoolDeleter>;
+using uarray_t      = array_t<uint32_t>;
+using iarray_t      = array_t<int32_t>;
+using farray_t      = array_t<float>;
+using darray_t      = array_t<double>;
+using num_threads_t = decltype(std::thread::hardware_concurrency());
+using AutoLock      = std::unique_lock<std::mutex>;
+
+template <typename _Tp>
+std::mutex&
+TypeMutex()
+{
+    static std::mutex _instance;
+    return _instance;
+}
 
 //======================================================================================//

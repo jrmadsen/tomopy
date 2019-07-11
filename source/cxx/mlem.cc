@@ -45,17 +45,12 @@
 
 //======================================================================================//
 
-typedef CpuData::init_data_t  init_data_t;
-typedef CpuData::data_array_t data_array_t;
-
-//======================================================================================//
-
 // directly call the CPU version
-DLL void
+/*DLL void
 mlem_cpu(const float* data, int dy, int dt, int dx, const float* center,
          const float* theta, float* recon, int ngridx, int ngridy, int num_iter,
          RuntimeOptions*);
-
+*/
 // directly call the GPU version
 DLL void
 mlem_cuda(const float* data, int dy, int dt, int dx, const float* center,
@@ -70,13 +65,13 @@ cxx_mlem(const float* data, int dy, int dt, int dx, const float* center,
          int pool_size, const char* interp, const char* device, int* grid_size,
          int* block_size)
 {
-    auto tid = GetThisThreadID();
+    auto tid = this_thread_id();
     // registration
     static Registration registration;
     // local count for the thread
     int count = registration.initialize();
     // number of threads started at Python level
-    auto tcount = GetEnv("TOMOPY_PYTHON_THREADS", HW_CONCURRENCY);
+    auto tcount = get_env("TOMOPY_PYTHON_THREADS", HW_CONCURRENCY);
 
     // configured runtime options
     RuntimeOptions opts(pool_size, interp, device, grid_size, block_size);
@@ -99,8 +94,8 @@ cxx_mlem(const float* data, int dy, int dt, int dx, const float* center,
         }
         else
         {
-            mlem_cpu(data, dy, dt, dx, center, theta, recon, ngridx, ngridy, num_iter,
-                     &opts);
+            // mlem_cpu(data, dy, dt, dx, center, theta, recon, ngridx, ngridy, num_iter,
+            //         &opts);
         }
     }
     catch(std::exception& e)
@@ -118,13 +113,13 @@ cxx_mlem(const float* data, int dy, int dt, int dx, const float* center,
 }
 
 //======================================================================================//
-
+/*
 void
 mlem_cpu_compute_projection(data_array_t& cpu_data, int p, int dy, int dt, int dx, int nx,
                             int ny, const float* theta)
 {
     ConsumeParameters(dy);
-    auto cache = cpu_data[GetThisThreadID() % cpu_data.size()];
+    auto cache = cpu_data[this_thread_id() % cpu_data.size()];
 
     // calculate some values
     float    theta_p = fmodf(theta[p] + halfpi, twopi);
@@ -164,7 +159,7 @@ mlem_cpu_compute_projection(data_array_t& cpu_data, int p, int dy, int dt, int d
         cxx_rotate_ip<float>(tmp, rot.data(), theta_p, nx, ny, cache->interpolation());
 
         // update local update array
-        for(uintmax_t i = 0; i < scast<uintmax_t>(nx * ny); ++i)
+        for(uintmax_t i = 0; i < static_cast<uintmax_t>(nx * ny); ++i)
             tmp_update[(s * nx * ny) + i] += tmp[i];
     }
 
@@ -174,7 +169,7 @@ mlem_cpu_compute_projection(data_array_t& cpu_data, int p, int dy, int dt, int d
         // update shared update array
         float* update = cache->update() + s * nx * ny;
         float* tmp    = tmp_update.data() + s * nx * ny;
-        for(uintmax_t i = 0; i < scast<uintmax_t>(nx * ny); ++i)
+        for(uintmax_t i = 0; i < static_cast<uintmax_t>(nx * ny); ++i)
             update[i] += tmp[i];
     }
     cache->upd_mutex()->unlock();
@@ -187,11 +182,11 @@ mlem_cpu(const float* data, int dy, int dt, int dx, const float*, const float* t
          float* recon, int ngridx, int ngridy, int num_iter, RuntimeOptions* opts)
 {
     printf("[%lu]> %s : nitr = %i, dy = %i, dt = %i, dx = %i, nx = %i, ny = %i\n",
-           GetThisThreadID(), __FUNCTION__, num_iter, dy, dt, dx, ngridx, ngridy);
+           this_thread_id(), __FUNCTION__, num_iter, dy, dt, dx, ngridx, ngridy);
 
     TIMEMORY_AUTO_TIMER("");
 
-    uintmax_t   recon_pixels = scast<uintmax_t>(dy * ngridx * ngridy);
+    uintmax_t   recon_pixels = static_cast<uintmax_t>(dy * ngridx * ngridy);
     farray_t    update(recon_pixels, 0.0f);
     init_data_t init_data =
         CpuData::initialize(opts, dy, dt, dx, ngridx, ngridy, recon, data, update.data());
@@ -218,7 +213,7 @@ mlem_cpu(const float* data, int dy, int dt, int dx, const float*, const float* t
         for(uintmax_t ii = 0; ii < recon_pixels; ++ii)
         {
             if(sum_dist[ii] != 0.0f && dx != 0 && update[ii] == update[ii])
-                recon[ii] *= update[ii] / sum_dist[ii] / scast<float>(dx);
+                recon[ii] *= update[ii] / sum_dist[ii] / static_cast<float>(dx);
             else if(!std::isfinite(update[ii]))
             {
                 std::cout << "update[" << ii << "] is not finite : " << update[ii]
@@ -230,7 +225,7 @@ mlem_cpu(const float* data, int dy, int dt, int dx, const float*, const float* t
 
     printf("\n");
 }
-
+*/
 //======================================================================================//
 #if !defined(TOMOPY_USE_CUDA)
 void
@@ -238,7 +233,7 @@ mlem_cuda(const float* data, int dy, int dt, int dx, const float* center,
           const float* theta, float* recon, int ngridx, int ngridy, int num_iter,
           RuntimeOptions* opts)
 {
-    mlem_cpu(data, dy, dt, dx, center, theta, recon, ngridx, ngridy, num_iter, opts);
+    // mlem_cpu(data, dy, dt, dx, center, theta, recon, ngridx, ngridy, num_iter, opts);
 }
 #endif
 //======================================================================================//

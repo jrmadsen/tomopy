@@ -46,25 +46,18 @@
 #ifdef TOMOPY_USE_TIMEMORY
 #    include <timemory/timemory.hpp>
 #else
-#    include <cstddef>
-#    include <cstring>
-#    define TIMEMORY_AUTO_TIMER(c_str)                                                   \
-        {                                                                                \
-        }
-#    define TIMEMORY_BASIC_AUTO_TIMER(c_str)                                             \
-        {                                                                                \
-        }
-
+#    define TIMEMORY_AUTO_TIMER(...)
+#    define TIMEMORY_BASIC_AUTO_TIMER(...)
+#    define TIMEMORY_AUTO_TUPLE(...)
+#    define TIMEMORY_BASIC_AUTO_TUPLE(...)
 namespace tim
 {
 inline void
 enable_signal_detection()
-{
-}
+{}
 inline void
 disable_signal_detection()
-{
-}
+{}
 }
 
 #endif
