@@ -122,7 +122,7 @@ mlem_cpu_compute_projection(data_array_t& cpu_data, int p, int dy, int dt, int d
     auto cache = cpu_data[this_thread_id() % cpu_data.size()];
 
     // calculate some values
-    float    theta_p = fmodf(theta[p] + halfpi, twopi);
+    float    theta_p = fmodf(theta[p], twopi);
     farray_t tmp_update(dy * nx * ny, 0.0);
 
     for(int s = 0; s < dy; ++s)

@@ -49,13 +49,13 @@ DLL void
 sirt_cpu(const float* data, int dy, int dt, int dx, const float* center,
          const float* theta, float* recon, int ngridx, int ngridy, int num_iter,
          RuntimeOptions*);
-
+*/
 // directly call the GPU version
 DLL void
 sirt_cuda(const float* data, int dy, int dt, int dx, const float* center,
           const float* theta, float* recon, int ngridx, int ngridy, int num_iter,
           RuntimeOptions*);
-*/
+
 //======================================================================================//
 
 int
@@ -88,11 +88,12 @@ cxx_sirt(const float* data, int dy, int dt, int dx, const float* center,
     {
         if(opts.device.key == "gpu")
         {
-            // sirt_cuda(data, dy, dt, dx, center, theta, recon, ngridx, ngridy, num_iter,
-            //          &opts);
+            sirt_cuda(data, dy, dt, dx, center, theta, recon, ngridx, ngridy, num_iter,
+                      &opts);
         }
         else
         {
+            return EXIT_FAILURE;
             // sirt_cpu(data, dy, dt, dx, center, theta, recon, ngridx, ngridy, num_iter,
             //         &opts);
         }
@@ -123,7 +124,7 @@ sirt_cpu_compute_projection(data_array_t& cpu_data, int p, int dy, int dt, int d
     auto cache = cpu_data[this_thread_id() % cpu_data.size()];
 
     // calculate some values
-    float    theta_p = fmodf(theta[p] + halfpi, twopi);
+    float    theta_p = fmodf(theta[p], twopi);
     farray_t tmp_update(dy * nx * ny, 0.0);
 
     for(int s = 0; s < dy; ++s)
@@ -226,7 +227,7 @@ sirt_cpu(const float* data, int dy, int dt, int dx, const float*, const float* t
 
     printf("\n");
 }
-
+*/
 //======================================================================================//
 #if !defined(TOMOPY_USE_CUDA)
 void
@@ -234,8 +235,7 @@ sirt_cuda(const float* data, int dy, int dt, int dx, const float* center,
           const float* theta, float* recon, int ngridx, int ngridy, int num_iter,
           RuntimeOptions* opts)
 {
-    sirt_cpu(data, dy, dt, dx, center, theta, recon, ngridx, ngridy, num_iter, opts);
+    throw std::runtime_error("sirt_cuda is not available!");
 }
 #endif
 //======================================================================================//
-*/

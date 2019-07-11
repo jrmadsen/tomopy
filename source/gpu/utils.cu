@@ -118,7 +118,7 @@ cuda_compute_sum_dist(int dy, int dt, int dx, int nx, int ny, const float* theta
 
     for(int p = 0; p < dt; ++p)
     {
-        float theta_p_rad = fmodf(theta[p] + halfpi, twopi);
+        float theta_p_rad = fmodf(theta[p], twopi);
         float theta_p_deg = theta_p_rad * degrees;
 
         gpu_memset<int32_t>(rot, 0, nx * nx, 0);

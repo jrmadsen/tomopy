@@ -42,7 +42,6 @@
 #include "macros.hh"
 #include "utils.hh"
 
-
 //======================================================================================//
 
 #if defined(TOMOPY_USE_NVTX)
@@ -67,42 +66,42 @@ init_nvtx()
     nvtx_total.version       = NVTX_VERSION;
     nvtx_total.size          = NVTX_EVENT_ATTRIB_STRUCT_SIZE;
     nvtx_total.colorType     = NVTX_COLOR_ARGB;
-    nvtx_total.color         = 0xff0000ff; // blue?
+    nvtx_total.color         = 0xff0000ff;  // blue?
     nvtx_total.messageType   = NVTX_MESSAGE_TYPE_ASCII;
     nvtx_total.message.ascii = "total time for all iterations";
 
     nvtx_iteration.version       = NVTX_VERSION;
     nvtx_iteration.size          = NVTX_EVENT_ATTRIB_STRUCT_SIZE;
     nvtx_iteration.colorType     = NVTX_COLOR_ARGB;
-    nvtx_iteration.color         = 0xffffff00; // yellow
+    nvtx_iteration.color         = 0xffffff00;  // yellow
     nvtx_iteration.messageType   = NVTX_MESSAGE_TYPE_ASCII;
     nvtx_iteration.message.ascii = "time per iteration";
 
     nvtx_slice.version       = NVTX_VERSION;
     nvtx_slice.size          = NVTX_EVENT_ATTRIB_STRUCT_SIZE;
     nvtx_slice.colorType     = NVTX_COLOR_ARGB;
-    nvtx_slice.color         = 0xff00ffff; // cyan
+    nvtx_slice.color         = 0xff00ffff;  // cyan
     nvtx_slice.messageType   = NVTX_MESSAGE_TYPE_ASCII;
     nvtx_slice.message.ascii = "time per slice";
 
     nvtx_projection.version       = NVTX_VERSION;
     nvtx_projection.size          = NVTX_EVENT_ATTRIB_STRUCT_SIZE;
     nvtx_projection.colorType     = NVTX_COLOR_ARGB;
-    nvtx_projection.color         = 0xff00ffff; // pink
+    nvtx_projection.color         = 0xff00ffff;  // pink
     nvtx_projection.messageType   = NVTX_MESSAGE_TYPE_ASCII;
     nvtx_projection.message.ascii = "time per projection";
 
     nvtx_update.version       = NVTX_VERSION;
     nvtx_update.size          = NVTX_EVENT_ATTRIB_STRUCT_SIZE;
     nvtx_update.colorType     = NVTX_COLOR_ARGB;
-    nvtx_update.color         = 0xff99ff99; // light green
+    nvtx_update.color         = 0xff99ff99;  // light green
     nvtx_update.messageType   = NVTX_MESSAGE_TYPE_ASCII;
     nvtx_update.message.ascii = "time updating";
 
     nvtx_rotate.version       = NVTX_VERSION;
     nvtx_rotate.size          = NVTX_EVENT_ATTRIB_STRUCT_SIZE;
     nvtx_rotate.colorType     = NVTX_COLOR_ARGB;
-    nvtx_rotate.color         = 0xff0000ff; // blue?
+    nvtx_rotate.color         = 0xff0000ff;  // blue?
     nvtx_rotate.messageType   = NVTX_MESSAGE_TYPE_ASCII;
     nvtx_rotate.message.ascii = "time rotating";
 }
@@ -296,25 +295,24 @@ cuda::device_query()
         printf("  Device PCI Domain ID / Bus ID / location ID:   %d / %d / %d\n",
                deviceProp.pciDomainID, deviceProp.pciBusID, deviceProp.pciDeviceID);
 
-        const char* sComputeMode[] = {
-            "Default (multiple host threads can use ::cudaSetDevice() with "
-            "device "
-            "simultaneously)",
-            "Exclusive (only one host thread in one process is able to use "
-            "::cudaSetDevice() with this device)",
-            "Prohibited (no host thread can use ::cudaSetDevice() with this "
-            "device)",
-            "Exclusive Process (many threads in one process is able to use "
-            "::cudaSetDevice() with this device)",
-            "Unknown",
-            nullptr
-        };
+        const char* sComputeMode[] =
+            { "Default (multiple host threads can use ::cudaSetDevice() with "
+              "device "
+              "simultaneously)",
+              "Exclusive (only one host thread in one process is able to use "
+              "::cudaSetDevice() with this device)",
+              "Prohibited (no host thread can use ::cudaSetDevice() with this "
+              "device)",
+              "Exclusive Process (many threads in one process is able to use "
+              "::cudaSetDevice() with this device)",
+              "Unknown",
+              nullptr };
         printf("  Compute Mode:\n");
         printf("     < %s >\n", sComputeMode[deviceProp.computeMode]);
     }
 
     printf("\n\n");
-    CUDA_CHECK_LAST_ERROR();
+    CUDA_CHECK_LAST_ERROR(0);
 }
 
 //======================================================================================//

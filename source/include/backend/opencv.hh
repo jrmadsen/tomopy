@@ -73,11 +73,10 @@ struct interpolation
 
     static int mode(const std::string& preferred)
     {
-        EnvChoiceList<int> choices = {
-            EnvChoice<int>(nn(), "NN", "nearest neighbor interpolation"),
-            EnvChoice<int>(linear(), "LINEAR", "bilinear interpolation"),
-            EnvChoice<int>(cubic(), "CUBIC", "bicubic interpolation")
-        };
+        EnvChoiceList<int> choices =
+            { EnvChoice<int>(nn(), "NN", "nearest neighbor interpolation"),
+              EnvChoice<int>(linear(), "LINEAR", "bilinear interpolation"),
+              EnvChoice<int>(cubic(), "CUBIC", "bicubic interpolation") };
         return GetChoice<int>(choices, preferred);
     }
 };
@@ -163,7 +162,7 @@ compute_sum_dist(int dy, int dt, int dx, int nx, int ny, const float* theta)
 
     for(int p = 0; p < dt; ++p)
     {
-        float theta_p_rad = fmodf(theta[p] + halfpi, twopi);
+        float theta_p_rad = fmodf(theta[p], twopi);
         rotate(rot, tmp.data(), -theta_p_rad, nx, ny, interpolation::nn());
         compute(rot, sum_dist, p);
     }

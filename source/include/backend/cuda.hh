@@ -154,6 +154,12 @@ using enable_if_t = impl::enable_if_t<B, T>;
 template <typename _Tp>
 using array_t = std::vector<_Tp>;
 
+inline int
+device_count();
+
+inline int
+device_sm_count(int device = 0);
+
 //--------------------------------------------------------------------------------------//
 //
 struct interpolation
@@ -164,11 +170,10 @@ struct interpolation
 
     static int mode(const std::string& preferred)
     {
-        EnvChoiceList<int> choices = {
-            EnvChoice<int>(nn(), "NN", "nearest neighbor interpolation"),
-            EnvChoice<int>(linear(), "LINEAR", "bilinear interpolation"),
-            EnvChoice<int>(cubic(), "CUBIC", "bicubic interpolation")
-        };
+        EnvChoiceList<int> choices =
+            { EnvChoice<int>(nn(), "NN", "nearest neighbor interpolation"),
+              EnvChoice<int>(linear(), "LINEAR", "bilinear interpolation"),
+              EnvChoice<int>(cubic(), "CUBIC", "bicubic interpolation") };
         return GetChoice<int>(choices, preferred);
     }
 };
@@ -179,7 +184,7 @@ struct kernel_params
 {
     static int compute(const int& size, const int& block_size)
     {
-        return (size + block_size - 1) / block_size;
+        return ((size + block_size - 1) / block_size);
     }
 
     uint32_t block = get_env<uint32_t>("TOMOPY_BLOCK_SIZE_X", 32);
@@ -187,8 +192,6 @@ struct kernel_params
 };
 
 //--------------------------------------------------------------------------------------//
-inline int
-device_count();
 
 inline uint32_t&
 this_thread_device()
@@ -280,7 +283,7 @@ device_query();
 //--------------------------------------------------------------------------------------//
 /// get the number of devices available
 inline int
-device_sm_count(int device = 0)
+device_sm_count(int device)
 {
     if(device_count() == 0)
         return 0;

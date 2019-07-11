@@ -158,7 +158,7 @@ rotate(int32_t* dst, const int32_t* src, const float theta_rad, const int nx,
 
 //======================================================================================//
 
-uint32_t*
+inline uint32_t*
 compute_sum_dist(int dy, int dt, int dx, int nx, int ny, const float* theta,
                  kernel_params& params)
 {
@@ -181,17 +181,17 @@ compute_sum_dist(int dy, int dt, int dx, int nx, int ny, const float* theta,
 
     assert(rot != nullptr);
     assert(tmp != nullptr);
-    assert(sum_dist != nullptr);
+    assert(sum != nullptr);
 
     for(int p = 0; p < dt; ++p)
     {
-        float theta_p_rad = fmodf(theta[p] + halfpi, twopi);
+        float theta_p_rad = fmodf(theta[p], twopi);
         cuda::memset<int32_t>(rot, 0, nx * nx, 0);
         rotate(rot, tmp, -theta_p_rad, nx, ny, 0, interpolation::nn());
         impl::compute_sum_dist<<<grid, block, smem>>>(dy, dx, nx, ny, rot, sum, p);
     }
 
-    CUDA_CHECK_LAST_ERROR();  // debug mode only
+    CUDA_CHECK_LAST_ERROR(0);  // debug mode only
     cuda::device_sync();
 
     // destroy

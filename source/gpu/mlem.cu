@@ -75,13 +75,13 @@ pixels_kernel(int p, int nx, int dx, float* recon, const float* data)
     {
         float sum = 0.0f;
         for(int i = 0; i < nx; ++i)
-            sum += recon[d * nx + i];
+            sum += recon[i * nx + d];
         if(sum != 0.0f)
         {
             float upd = data[p * dx + d] / sum;
             if(upd == upd)
                 for(int i = 0; i < nx; ++i)
-                    recon[d * nx + i] += upd;
+                    recon[i * nx + d] += upd;
         }
     }
 }
@@ -94,13 +94,14 @@ update_kernel(float* recon, const float* update, const uint32_t* sum_dist, int d
 {
     if(dx == 0)
         return;
-    auto range = grid_strided_range<device::gpu, 0>(size);
-
+    auto  range = grid_strided_range<device::gpu, 0>(size);
+    float fdx   = static_cast<float>(dx);
     for(int i = range.begin(); i < range.end(); i += range.stride())
     {
-        if(sum_dist[i] != 0 && update[i] == update[i])
-            recon[i] *=
-                update[i] / static_cast<float>(sum_dist[i]) / static_cast<float>(dx);
+        uint32_t sum = sum_dist[i];
+        float    upd = update[i];
+        if(sum != 0 && update[i] == update[i])
+            recon[i] *= upd / static_cast<float>(sum) / fdx;
     }
 }
 
@@ -113,15 +114,16 @@ compute_projection(int p, int dy, int dt, int dx, int nx, int ny, const float* t
                    int eInterp = cuda::interpolation::nn())
 {
     // calculate some values
-    float theta_p_rad = fmodf(theta[p] + halfpi, twopi);
+    float theta_p_rad = fmodf(theta[p], twopi);
     int   block       = params.block;
-    int   grid        = params.compute(dx, block);
+    int   grid        = params.compute(nx, block);
 
     // reset destination arrays (NECESSARY! or will cause NaNs)
     // only do once bc for same theta, same pixels get overwritten
     cuda::memset(rot, 0, dy * nx * ny, stream);
     cuda::memset(tmp, 0, dy * nx * ny, stream);
 
+    int smem = 0;
     for(int s = 0; s < dy; ++s)
     {
         const float* _recon  = recon + s * nx * ny;
@@ -134,7 +136,7 @@ compute_projection(int p, int dy, int dt, int dx, int nx, int ny, const float* t
         cuda::rotate(_rot, _recon, -theta_p_rad, nx, ny, stream, eInterp);
 
         // compute simdata
-        pixels_kernel<<<grid, block, 0, stream>>>(p, nx, dx, _rot, _data);
+        pixels_kernel<<<grid, block, smem, stream>>>(p, nx, dx, _rot, _data);
         CUDA_CHECK_LAST_ERROR(stream);
 
         // back-rotate
@@ -143,9 +145,6 @@ compute_projection(int p, int dy, int dt, int dx, int nx, int ny, const float* t
         // update shared update array
         cuda::atomic_sum<<<grid, block, 0, stream>>>(_update, _tmp, nx * ny, 1.0f);
         CUDA_CHECK_LAST_ERROR(stream);
-
-        // synchronize the stream (do this frequently to avoid backlog)
-        cuda::stream_sync(stream);
     }
 }
 }
@@ -186,6 +185,7 @@ mlem_cuda(const float* cpu_data, int dy, int dt, int dx, const float*, const flo
 
     auto block = params.block;
     auto grid  = params.compute(recon_pixels, block);
+    auto smem  = 0 * recon_pixels * sizeof(float);
 
     TOMOPY_NVXT_RANGE_PUSH(&nvtx_total);
 
@@ -226,7 +226,7 @@ mlem_cuda(const float* cpu_data, int dy, int dt, int dx, const float*, const flo
         cuda::stream_sync(0);
 
         // update the global recon with global update and sum_dist
-        update_kernel<<<grid, block>>>(recon, update, sum_dist, dx, recon_pixels);
+        update_kernel<<<grid, block, smem>>>(recon, update, sum_dist, dx, recon_pixels);
 
         // stop profile range and report timing
         TOMOPY_NVXT_RANGE_POP(0);
