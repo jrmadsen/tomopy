@@ -53,11 +53,11 @@ namespace cuda
 //
 template <typename _Tp, typename _Up = _Tp>
 GLOBAL_CALLABLE void
-atomic_sum(_Tp* dst, const _Up* src, uintmax_t size, const _Tp factor)
+atomic_sum(_Tp* dst, const _Up* src, uintmax_t size)
 {
     auto range = grid_strided_range<device::gpu, 0>(size);
     for(auto i = range.begin(); i < range.end(); i += range.stride())
-        atomicAdd(&dst[i], static_cast<_Tp>(factor * src[i]));
+        atomicAdd(&dst[i], static_cast<_Tp>(src[i]));
 }
 
 namespace impl

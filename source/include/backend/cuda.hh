@@ -170,10 +170,11 @@ struct interpolation
 
     static int mode(const std::string& preferred)
     {
-        EnvChoiceList<int> choices =
-            { EnvChoice<int>(nn(), "NN", "nearest neighbor interpolation"),
-              EnvChoice<int>(linear(), "LINEAR", "bilinear interpolation"),
-              EnvChoice<int>(cubic(), "CUBIC", "bicubic interpolation") };
+        EnvChoiceList<int> choices = {
+            EnvChoice<int>(nn(), "NN", "nearest neighbor interpolation"),
+            EnvChoice<int>(linear(), "LINEAR", "bilinear interpolation"),
+            EnvChoice<int>(cubic(), "CUBIC", "bicubic interpolation")
+        };
         return GetChoice<int>(choices, preferred);
     }
 };
@@ -182,13 +183,25 @@ struct interpolation
 
 struct kernel_params
 {
+    kernel_params() = default;
+
+    explicit kernel_params(uint32_t _block, uint32_t _grid = 0)
+    : block(_block)
+    , grid(_grid)
+    {}
+
+    int compute(const int& size)
+    {
+        return (grid == 0) ? ((size + block - 1) / block) : grid;
+    }
+
     static int compute(const int& size, const int& block_size)
     {
         return ((size + block_size - 1) / block_size);
     }
 
-    uint32_t block = get_env<uint32_t>("TOMOPY_BLOCK_SIZE_X", 32);
-    uint32_t grid  = get_env<uint32_t>("TOMOPY_BLOCK_SIZE", 0);  // 0 == compute
+    uint32_t block = get_env<uint32_t>("TOMOPY_BLOCK_SIZE", 32);
+    uint32_t grid  = get_env<uint32_t>("TOMOPY_GRID_SIZE", 0);  // 0 == compute
 };
 
 //--------------------------------------------------------------------------------------//

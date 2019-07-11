@@ -18,10 +18,9 @@ set(CMAKE_INSTALL_LIBDIR ${PYTHON_SITE_DIR}/tomopy/sharedlibs
 #   PTL submodule
 #
 #------------------------------------------------------------------------------#
-checkout_git_submodule(RECURSIVE TEST_FILE CMakeLists.txt
-    RELATIVE_PATH source/PTL WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
-
 if(TOMOPY_USE_PTL)
+    checkout_git_submodule(RECURSIVE TEST_FILE CMakeLists.txt
+        RELATIVE_PATH source/PTL WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
     add_subdirectory(PTL)
     if(BUILD_STATIC_LIBS)
         list(APPEND EXTERNAL_LIBRARIES ptl-static)

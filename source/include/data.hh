@@ -50,6 +50,7 @@
 #include "common.hh"
 #include "constants.hh"
 #include "macros.hh"
+#include "options.hh"
 #include "typedefs.hh"
 #include "utils.hh"
 
@@ -60,87 +61,6 @@
 #include <array>
 #include <atomic>
 #include <functional>
-
-//======================================================================================//
-
-struct RuntimeOptions
-{
-    num_threads_t      pool_size     = HW_CONCURRENCY;
-    int                interpolation = -1;
-    DeviceOption       device;
-    std::array<int, 3> block_size = { { 32, 1, 1 } };
-    std::array<int, 3> grid_size  = { { 0, 0, 0 } };
-
-    RuntimeOptions(int _pool_size, const char* _interp, const char* _device,
-                   int* _grid_size, int* _block_size)
-    : pool_size(static_cast<num_threads_t>(_pool_size))
-    , device(GetDevice(_device))
-    {
-        memcpy(grid_size.data(), _grid_size, 3 * sizeof(int));
-        memcpy(block_size.data(), _block_size, 3 * sizeof(int));
-
-        if(device.key == "gpu")
-        {
-#if defined(TOMOPY_USE_CUDA)
-            interpolation = cuda::interpolation::mode(_interp);
-#else
-            interpolation = opencv::interpolation::mode(_interp);
-#endif
-        }
-        else
-        {
-            interpolation = opencv::interpolation::mode(_interp);
-        }
-    }
-
-    ~RuntimeOptions() {}
-
-    // disable copying and copy assignment
-    RuntimeOptions(const RuntimeOptions&) = delete;
-    RuntimeOptions& operator=(const RuntimeOptions&) = delete;
-
-    // create the thread pool -- don't have this in the constructor
-    // because you don't want to arbitrarily create thread-pools
-    void init()
-    {
-        if(pool_size == 0)
-        {
-            pool_size = 32;
-        }
-    }
-
-    // invoke the generic printer defined in common.hh
-    template <typename... _Descriptions, typename... _Objects>
-    void print(std::tuple<_Descriptions...>&& _descripts, std::tuple<_Objects...>&& _objs,
-               std::ostream& os, intmax_t _prefix_width, intmax_t _obj_width,
-               std::ios_base::fmtflags format_flags, bool endline) const
-    {
-        // tuple of descriptions
-        using DescriptType = std::tuple<_Descriptions...>;
-        // tuple of objects to print
-        using ObjectType = std::tuple<_Objects...>;
-        // the operator that does the printing (see end of
-        using UnrollType = std::tuple<internal::GenericPrinter<_Objects>...>;
-
-        internal::apply::unroll<UnrollType>(std::forward<DescriptType>(_descripts),
-                                            std::forward<ObjectType>(_objs), std::ref(os),
-                                            _prefix_width, _obj_width, format_flags,
-                                            endline);
-    }
-
-    // overload the output operator for the class
-    friend std::ostream& operator<<(std::ostream& os, const RuntimeOptions& opts)
-    {
-        std::stringstream ss;
-        opts.print(std::make_tuple("Thread-pool size", "Interpolation mode", "Device",
-                                   "Grid size", "Block size"),
-                   std::make_tuple(opts.pool_size, opts.interpolation, opts.device,
-                                   opts.block_size, opts.grid_size),
-                   ss, 30, 20, std::ios::boolalpha, true);
-        os << ss.str();
-        return os;
-    }
-};
 
 //======================================================================================//
 
@@ -189,80 +109,5 @@ struct Registration
         return _active;
     }
 };
-
-//======================================================================================//
-
-#if defined(TOMOPY_USE_PTL)
-
-//--------------------------------------------------------------------------------------//
-// when PTL thread-pool is available
-//
-template <typename DataArray, typename Func, typename... Args>
-void
-execute(RuntimeOptions* ops, int dt, DataArray& data, Func&& func, Args&&... args)
-{
-    // get the thread pool
-    auto& tp   = ops->thread_pool;
-    auto  join = [&]() { stream_sync(0); };
-    assert(tp != nullptr);
-
-    try
-    {
-        tomopy::TaskGroup<void> tg(join, tp.get());
-        for(int p = 0; p < dt; ++p)
-        {
-            auto _func = std::bind(std::forward<Func>(func), std::ref(data),
-                                   std::forward<int>(p), std::forward<Args>(args)...);
-            tg.run(_func);
-        }
-        tg.join();
-    }
-    catch(const std::exception& e)
-    {
-        std::stringstream ss;
-        ss << "\n\nError executing :: " << e.what() << "\n\n";
-        {
-            AutoLock l(TypeMutex<decltype(std::cout)>());
-            std::cerr << e.what() << std::endl;
-        }
-        throw std::runtime_error(ss.str().c_str());
-    }
-}
-
-#else
-
-//--------------------------------------------------------------------------------------//
-// when PTL thread-pool is not available
-//
-template <typename DataArray, typename Func, typename... Args>
-void
-execute(RuntimeOptions* ops, int dt, DataArray& data, Func&& func, Args&&... args)
-{
-    // sync streams
-    auto join = [&]() { /*cuda::stream_sync(0);*/ };
-
-    try
-    {
-        for(int p = 0; p < dt; ++p)
-        {
-            auto _func = std::bind(std::forward<Func>(func), std::ref(data),
-                                   std::forward<int>(p), std::forward<Args>(args)...);
-            _func();
-        }
-        join();
-    }
-    catch(const std::exception& e)
-    {
-        std::stringstream ss;
-        ss << "\n\nError executing :: " << e.what() << "\n\n";
-        {
-            AutoLock l(TypeMutex<decltype(std::cout)>());
-            std::cerr << e.what() << std::endl;
-        }
-        throw std::runtime_error(ss.str().c_str());
-    }
-}
-
-#endif
 
 //======================================================================================//

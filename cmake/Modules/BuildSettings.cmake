@@ -190,22 +190,24 @@ endif()
 
 # ---------------------------------------------------------------------------- #
 # user customization
-to_list(_CFLAGS "${CFLAGS};$ENV{CFLAGS}")
-foreach(_FLAG ${_CFLAGS})
-    if(TOMOPY_USER_FLAGS)
+if(TOMOPY_USER_FLAGS)
+    to_list(_CFLAGS "${CFLAGS};$ENV{CFLAGS}")
+    to_list(_CXXFLAGS "${CXXFLAGS};$ENV{CXXFLAGS}")
+    to_list(_CUDAFLAGS "${CUDAFLAGS};$ENV{CUDAFLAGS}")
+
+    foreach(_FLAG ${_CFLAGS})
         list(APPEND ${PROJECT_NAME}_C_FLAGS "${_FLAG}")
-    else()
-        add_c_flag_if_avail("${_FLAG}")
-    endif()
-endforeach()
+    endforeach()
 
-to_list(_CXXFLAGS "${CXXFLAGS};$ENV{CXXFLAGS}")
-foreach(_FLAG ${_CXXFLAGS})
-    if(TOMOPY_USER_FLAGS)
+    foreach(_FLAG ${_CXXFLAGS})
         list(APPEND ${PROJECT_NAME}_CXX_FLAGS "${_FLAG}")
-    else()
-        add_cxx_flag_if_avail("${_FLAG}")
-    endif()
-endforeach()
+    endforeach()
 
+    foreach(_FLAG ${_CXXFLAGS})
+        list(APPEND ${PROJECT_NAME}_CUDA_FLAGS "${_FLAG}")
+    endforeach()
+
+    unset(_CFLAGS)
+    unset(_CXXFLAGS)
+endif()
 

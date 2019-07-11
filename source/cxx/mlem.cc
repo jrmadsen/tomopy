@@ -39,6 +39,7 @@
 
 #include "common.hh"
 #include "data.hh"
+#include "options.hh"
 #include "utils.hh"
 
 #include <cstdlib>
@@ -78,6 +79,7 @@ cxx_mlem(const float* data, int dy, int dt, int dx, const float* center,
 
     // create the thread-pool
     opts.init();
+    std::cout << "Options: " << opts << std::endl;
 
     START_TIMER(cxx_timer);
     TIMEMORY_AUTO_TIMER("");

@@ -139,7 +139,7 @@ compute_projection(int p, int dy, int dt, int dx, int nx, int ny, const float* t
         cuda::rotate(_tmp, _rot, theta_p_rad, nx, ny, stream, eInterp);
 
         // update shared update array
-        cuda::atomic_sum<<<grid, block, 0, stream>>>(_update, _tmp, nx * ny, 1.0f);
+        cuda::atomic_sum<<<grid, block, 0, stream>>>(_update, _tmp, nx * ny);
         CUDA_CHECK_LAST_ERROR(stream);
     }
 }
@@ -168,7 +168,7 @@ sirt_cuda(const float* cpu_data, int dy, int dt, int dx, const float*, const flo
     printf("[%lu] Running on device %i...\n", this_thread_id(), device);
 
     uintmax_t recon_pixels = static_cast<uintmax_t>(dy * nx * ny);
-    auto      params       = cuda::kernel_params();
+    auto      params       = cuda::kernel_params(opts->block_size[0], opts->grid_size[0]);
     auto      streams      = cuda::stream_create(opts->pool_size);
     float*    update       = cuda::malloc<float>(recon_pixels);
     float*    tmp_rot      = cuda::malloc<float>(streams.size() * recon_pixels);
