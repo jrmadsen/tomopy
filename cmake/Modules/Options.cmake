@@ -67,6 +67,7 @@ add_option(TOMOPY_USER_FLAGS "Insert CFLAGS and CXXFLAGS regardless of whether p
 if(TOMOPY_USE_CUDA)
     add_option(TOMOPY_USE_NVTX "Enable NVTX for Nsight" OFF)
     add_feature(CMAKE_CUDA_STANDARD "CUDA STL standard")
+    add_option(TOMOPY_CUDA_LINEINFO "Enable -lineinfo for profiling" OFF)
 endif(TOMOPY_USE_CUDA)
 
 if(TOMOPY_USE_SANITIZER)

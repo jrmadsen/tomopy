@@ -105,7 +105,7 @@ struct RuntimeOptions
     {
         if(pool_size == 0)
         {
-            pool_size = HW_CONCURRENCY / get_env<size_t>("TOMOPY_PYTHON_THREADS", 1);
+            pool_size = 32;
         }
     }
 

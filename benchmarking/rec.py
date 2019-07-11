@@ -120,6 +120,8 @@ def reconstruct(h5fname, sino, rot_center, args, blocked_views=None):
     # use the accelerated version
     if algorithm in ["mlem", "sirt"]:
         _kwargs["accelerated"] = True
+        _kwargs["interpolation"] = "nn"
+        _kwargs["block_size"] = np.array([512, 1, 1], dtype='int32')
 
     # don't assign "num_iter" if gridrec or fbp
     if algorithm not in ["fbp", "gridrec"]:
