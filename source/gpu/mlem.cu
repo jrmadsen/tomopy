@@ -37,8 +37,8 @@
 //  ---------------------------------------------------------------
 //   TOMOPY CUDA implementation
 
-#include "backend/cuda.hh"
-#include "backend/cuda_algorithms.hh"
+#include "backend/cuda/algorithm.hh"
+#include "backend/cuda/functional.hh"
 #include "backend/ranges.hh"
 #include "common.hh"
 #include "constants.hh"
@@ -68,7 +68,7 @@ extern nvtxEventAttributes_t nvtx_rotate;
 namespace
 {
 GLOBAL_CALLABLE void
-pixels_kernel(int p, int dy, int dx, int nx, int ny, float* glob_recon, const float* data)
+pixels_kernel(int p, int nx, int dx, float* recon, const float* data, float* sum)
 {
     // dt == number of angles
     // dy == number of slices
@@ -76,47 +76,29 @@ pixels_kernel(int p, int dy, int dx, int nx, int ny, float* glob_recon, const fl
     // nx == ngridx
     // ny == ngridy
 
-    extern __shared__ float sum[];  // size dy * nx
+    auto nx_range = grid_strided_range<device::gpu, 0>(nx);
+    auto dx_range = grid_strided_range<device::gpu, 1>(dx);
 
-    // set shared to zero
+    for(int i = nx_range.begin(); i < nx_range.end(); i += nx_range.stride())
     {
-        auto range = grid_strided_range<device::gpu, 0>(dx);
-        for(int i = range.begin(); i < range.end(); i += range.stride())
-        {
-            sum[i] = 0.0f;
-        }
+        auto* _recon = recon + i * nx;
+        for(int d = dx_range.begin(); d < dx_range.end(); d += dx_range.stride())
+            atomicAdd(&sum[d], _recon[d]);
     }
-    __syncthreads();
 
-    for(int k = 0; k < dy; ++k)
+    for(int i = nx_range.begin(); i < nx_range.end(); i += nx_range.stride())
     {
-        float* _sum   = sum + k * dy;
-        float* _recon = glob_recon + k * nx * ny;
-        auto   range  = grid_strided_range<device::gpu, 0>(dx * nx);
-        for(int i = range.begin(); i < range.end(); i += range.stride())
-        {
-            atomicAdd(&_sum[i % dx], _recon[i]);
-        }
-    }
-    __syncthreads();
-
-    for(int k = 0; k < dy; ++k)
-    {
-        const float* _data  = data + p * dx;
-        float*       _sum   = sum + k * dy;
-        float*       _recon = glob_recon + k * nx * ny;
-        auto         range  = grid_strided_range<device::gpu, 0>(dx * nx);
-        for(int i = range.begin(); i < range.end(); i += range.stride())
-        {
-            _recon[i] += _data[i] / _sum[i % dx];
-        }
+        auto* _recon = recon + i * nx;
+        auto* _data  = data + p * dx;
+        for(int d = dx_range.begin(); d < dx_range.end(); d += dx_range.stride())
+            atomicAdd(&_recon[d], _data[d] / sum[d]);
     }
 }
 
 //======================================================================================//
 
 GLOBAL_CALLABLE void
-update_kernel(float* recon, const float* update, const uint32_t* sum_dist, int dx,
+update_kernel(float* recon, float* update, const uint32_t* sum_dist, int dx,
               int size)
 {
     if(dx == 0)
@@ -127,18 +109,21 @@ update_kernel(float* recon, const float* update, const uint32_t* sum_dist, int d
     {
         uint32_t sum = sum_dist[i];
         float    upd = update[i];
-        if(sum != 0 && update[i] == update[i])
+        if(sum != 0)
             recon[i] *= upd / static_cast<float>(sum) / fdx;
+        // reset for next iteration
+        update[i] = 0.0f;
     }
 }
 
-} // namespace
+}  // namespace
 
 //======================================================================================//
 
 void
-mlem_cuda(const float* cpu_data, int dy, int dt, int dx, const float*, const float* theta,
-          float* cpu_recon, int nx, int ny, int num_iter, RuntimeOptions* opts)
+mlem_cuda(const float* cpu_data, int dy, int dt, int dx, const float* center,
+          const float* theta, float* cpu_recon, int nx, int ny, int num_iter,
+          RuntimeOptions* opts)
 {
     printf("[%lu]> %s : nitr = %i, dy = %i, dt = %i, dx = %i, nx = %i, ny = %i\n",
            this_thread_id(), __FUNCTION__, num_iter, dy, dt, dx, nx, ny);
@@ -156,32 +141,54 @@ mlem_cuda(const float* cpu_data, int dy, int dt, int dx, const float*, const flo
     cuda::set_device(device);
     printf("[%lu] Running on device %i...\n", this_thread_id(), device);
 
-    auto      interp       = opts->interpolation;
-    uintmax_t recon_pixels = static_cast<uintmax_t>(dy * nx * ny);
-    auto      params       = cuda::kernel_params(opts->block_size[0], opts->grid_size[0]);
-    auto      streams      = cuda::stream_create(opts->pool_size);
-    float*    update       = cuda::malloc<float>(recon_pixels);
-    float*    plus_rot     = cuda::malloc<float>(dt * recon_pixels);
-    float*    back_rot     = cuda::malloc<float>(dt * recon_pixels);
-    float*    recon        = cuda::malloc<float>(recon_pixels);
-    float*    data         = cuda::malloc<float>(dy * dt * dx);
-    cuda::memcpy(recon, cpu_recon, recon_pixels, cuda::host_to_device_v, 0);
-    cuda::memcpy(data, cpu_data, dy * dt * dx, cuda::host_to_device_v, 0);
-    uint32_t* sum_dist = cuda::compute_sum_dist(dy, dt, dx, nx, ny, theta, params);
+    auto interp       = opts->interpolation;
+    auto recon_pixels = static_cast<uintmax_t>(dy * nx * ny);
+    auto params       = cuda::kernel_params(opts->block_size[0], opts->grid_size[0]);
+    auto streams      = cuda::stream_create(opts->pool_size);
+
+    auto get_proj   = [&](float* arr, const int& p) { return arr + p * recon_pixels; };
+    auto get_slice  = [&](float* arr, const int& s) { return arr + s * nx * ny; };
+    auto get_offset = [&](const size_t& offset) { return offset % streams.size(); };
+    auto get_stream = [&](const size_t& offset) {
+        return streams.at(get_offset(offset));
+    };
+    auto sync_stream = [&](const size_t& beg, const size_t& end,
+                           bool sync_implicit = true) {
+        for(size_t i = beg; i < (end % streams.size()); ++i)
+            cuda::stream_sync(streams.at(i));
+        if(sync_implicit)
+            cuda::stream_sync(0);
+    };
+
+    // used by compute_sum_dist
+    auto* sum_dist_rot = cuda::malloc<int32_t>(nx * ny);
+    auto* sum_dist_tmp = cuda::malloc<int32_t>(nx * ny);
+    auto* sum_dist     = cuda::malloc<uint32_t>(dy * nx * ny);
+
+    auto* plus_rot = cuda::malloc<float>(streams.size() * recon_pixels);
+    auto* back_rot = cuda::malloc<float>(streams.size() * recon_pixels);
+    auto* sum_rot  = cuda::malloc<float>(streams.size() * dx);
+    auto* data     = cuda::malloc<float>(dy * dt * dx);
+    auto* recon    = cuda::malloc<float>(recon_pixels);
+    auto* update   = cuda::malloc<float>(recon_pixels);
+    cuda::memset(sum_dist_tmp, 1, nx * ny, get_stream(0));
+    cuda::memset(sum_dist, 0, dy * nx * ny, get_stream(0));
+    cuda::compute_sum_dist(sum_dist, sum_dist_rot, sum_dist_tmp, dy, dt, dx, nx, ny,
+                           theta, center[0], params, get_stream(0));
+    cuda::memcpy(recon, cpu_recon, recon_pixels, cuda::host_to_device_v, get_stream(1));
+    cuda::memcpy(data, cpu_data, dy * dt * dx, cuda::host_to_device_v, get_stream(2));
+    cuda::memset(update, 0, recon_pixels, get_stream(3));
+    cuda::launch(params, recon_pixels, get_stream(4), cuda::atomic_add<float, float>,
+                 recon, cuda::fepsilon, recon_pixels);
 
     TOMOPY_NVXT_RANGE_PUSH(&nvtx_total);
 
-    auto get_stream = [&](const size_t& offset) {
-        return streams.at(offset % streams.size());
-    };
+    // used streams 0, 1, 2, 3, and 4 above
+    sync_stream(0, 4);
 
-    auto sync_stream = [&](const size_t& beg, const size_t& end) {
-        for(size_t i = beg; i < end; ++i)
-            cuda::stream_sync(get_stream(i));
-    };
-
-    auto get_proj  = [&](float* arr, const int& p) { return arr + p * recon_pixels; };
-    auto get_slice = [&](float* arr, const int& s) { return arr + s * nx * ny; };
+    // no longer needed
+    cuda::free(sum_dist_rot);
+    cuda::free(sum_dist_tmp);
 
     for(int i = 0; i < num_iter; i++)
     {
@@ -190,14 +197,43 @@ mlem_cuda(const float* cpu_data, int dy, int dt, int dx, const float*, const flo
         TOMOPY_NVXT_RANGE_PUSH(&nvtx_iteration);
         START_TIMER(t_start);
 
-        // reset global update and sum_dist
-        cuda::memset(update, 0, recon_pixels, get_stream(0));
-        cuda::memset(plus_rot, 0, dt * recon_pixels, get_stream(1));
-        cuda::memset(back_rot, 0, dt * recon_pixels, get_stream(2));
+        // loop over independent projection angles
+        for(int p = 0; p < dt; ++p)
+        {
+            auto  stream  = get_stream(p);
+            auto  offset  = get_offset(p);
+            auto  theta_p = fmodf(theta[p], twopi);
+            auto* p_plus  = get_proj(plus_rot, offset);
+            auto* p_back  = get_proj(back_rot, offset);
+            auto  p_sum   = sum_rot + (offset * dx);
 
-        // sync
-        sync_stream(0, 3);
+            cuda::memset(p_plus, 0, recon_pixels, stream);
+            cuda::memset(p_back, 0, recon_pixels, stream);
 
+            // loop over independent slices
+            for(int s = 0; s < dy; ++s)
+            {
+                cuda::memset(p_plus, 0, recon_pixels, stream);
+                cuda::memset(p_back, 0, recon_pixels, stream);
+                cuda::memset(p_sum, 0, dx, stream);
+
+                auto* s_recon  = get_slice(recon, s);
+                auto* s_update = get_slice(update, s);
+                auto* s_data   = data + s * dt * dx;
+                auto* s_plus   = get_slice(p_plus, s);
+                auto* s_back   = get_slice(p_back, s);
+
+                cuda::rotate(s_plus, s_recon, -theta_p, center[s], nx, ny, stream,
+                             interp);
+                cuda::launch(params, dx * nx, stream, pixels_kernel, p, nx, dx, s_plus,
+                             s_data, p_sum);
+                cuda::rotate(s_back, s_plus, theta_p, center[s], nx, ny, stream, interp);
+                cuda::launch(params, nx * ny, stream, cuda::atomic_add<float, float*>,
+                             s_update, s_back, nx * ny);
+            }
+        }
+
+        /*
         // execute the loop over slices and projection angles
         // loop over independent projection angles
         for(int p = 0; p < dt; ++p)
@@ -205,7 +241,7 @@ mlem_cuda(const float* cpu_data, int dy, int dt, int dx, const float*, const flo
             cuda::stream_t stream  = get_stream(p);
             float          theta_p = fmodf(theta[p], twopi);
 
-            float* p_plus_rot = get_proj(plus_rot, p);
+            float* p_plus = get_proj(plus_rot, p);
             for(int s = 0; s < dy; ++s)
             {
                 const float* s_recon     = recon + s * nx * ny;
@@ -232,29 +268,28 @@ mlem_cuda(const float* cpu_data, int dy, int dt, int dx, const float*, const flo
 
             CUDA_CHECK_LAST_ERROR(stream);
         }
-
+        */
         // update array
         for(int p = 0; p < dt; ++p)
         {
-            cuda::stream_t stream = get_stream(p);
-            int            block  = params.block;
-            int            grid   = params.compute(recon_pixels);
-            cuda::atomic_sum<<<grid, block, 0, stream>>>(update, get_proj(back_rot, p),
-                                                         recon_pixels);
+            cuda::launch(params, recon_pixels, get_stream(p), cuda::atomic_add<float, float*>,
+                         update, get_proj(back_rot, p), recon_pixels);
         }
 
+        // sync
+        sync_stream(0, 3);
+        cuda::stream_sync(0);
+
         // update the global recon with global update and sum_dist
-        int block = params.block;
-        int grid  = params.compute(recon_pixels);
-        update_kernel<<<grid, block>>>(recon, update, sum_dist, dx, recon_pixels);
+        cuda::launch(params, recon_pixels, 0, update_kernel, recon, update, sum_dist, dx,
+                     recon_pixels);
 
         // stop profile range and report timing
         TOMOPY_NVXT_RANGE_POP(0);
         REPORT_TIMER(t_start, "iteration", i, num_iter);
     }
 
-    for(auto& itr : streams)
-        cuda::stream_sync(itr);
+    sync_stream(0, 3);
     cuda::stream_sync(0);
 
     // copy to cpu

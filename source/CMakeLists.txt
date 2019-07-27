@@ -5,30 +5,8 @@
 ################################################################################
 # ensure PIC flag is set
 set(PYTHON_SITE_DIR ${CMAKE_INSTALL_PREFIX}/source)
-set(BUILD_STATIC_LIBS     ON  CACHE BOOL "Build static libraries")
-set(BUILD_SHARED_LIBS     OFF CACHE BOOL "Build shared libraries")
-set(PTL_DEVELOPER_INSTALL OFF CACHE BOOL "Install headers, cmake export, and shared libs" FORCE)
-set(CMAKE_POSITION_INDEPENDENT_CODE ON
-    CACHE BOOL "Position independent code" FORCE)
 set(CMAKE_INSTALL_LIBDIR ${PYTHON_SITE_DIR}/tomopy/sharedlibs
     CACHE PATH "Installation directory of libraries" FORCE)
-
-#------------------------------------------------------------------------------#
-#
-#   PTL submodule
-#
-#------------------------------------------------------------------------------#
-if(TOMOPY_USE_PTL)
-    checkout_git_submodule(RECURSIVE TEST_FILE CMakeLists.txt
-        RELATIVE_PATH source/PTL WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
-    add_subdirectory(PTL)
-    if(BUILD_STATIC_LIBS)
-        list(APPEND EXTERNAL_LIBRARIES ptl-static)
-    else()
-        list(APPEND EXTERNAL_LIBRARIES ptl-shared)
-    endif()
-    list(APPEND ${PROJECT_NAME}_DEFINITIONS TOMOPY_USE_PTL)
-endif()
 
 #------------------------------------------------------------------------------#
 #

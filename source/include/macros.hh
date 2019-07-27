@@ -75,6 +75,12 @@ extern "C"
 #include <thread>
 
 //======================================================================================//
+// determine if C++20 is available
+#if __cplusplus > 201703L
+#    define CXX_20
+#endif
+
+//======================================================================================//
 // this function is used by a macro -- returns a unique identifier to the thread
 inline uintmax_t
 this_thread_id()

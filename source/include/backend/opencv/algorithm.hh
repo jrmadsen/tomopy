@@ -41,9 +41,10 @@
 #pragma once
 
 #include "backend/device.hh"
-#include "backend/opencv.hh"
+#include "backend/opencv/functional.hh"
 #include "backend/ranges.hh"
 #include "constants.hh"
+#include "typedefs.hh"
 
 #include <cstdint>
 
@@ -65,20 +66,47 @@
 namespace opencv
 {
 //--------------------------------------------------------------------------------------//
+// non-atomic types
 //
-template <typename _Tp, typename _Up = _Tp>
+template <typename _Tp, typename _Up>
 void
-atomic_sum(_Tp* dst, const _Up* src, uintmax_t size)
+atomic_add(_Tp& dst, const _Up& val)
 {
-    using mutex_t = std::mutex;
-    using lock_t  = std::unique_lock<mutex_t>;
+    dst += static_cast<_Tp>(val);
+}
 
-    static mutex_t mtx;
-    lock_t         lk(mtx);
+//--------------------------------------------------------------------------------------//
+// atomic types
+//
+template <typename _Tp, typename _Up>
+void
+atomic_add(std::atomic<_Tp>& dst, const _Up& val)
+{
+    auto _dst = dst.load(std::memory_order_relaxed);
+    while(!dst.compare_exchange_strong(_dst, _dst + val, std::memory_order_relaxed))
+        _dst = dst.load(std::memory_order_relaxed);
+}
 
+//--------------------------------------------------------------------------------------//
+//
+template <typename _Tp, typename _Up, enable_if_t<(is_pointer_v<_Up>::value), int> = 0>
+void
+atomic_add(_Tp* dst, const _Up& src, uintmax_t size)
+{
     auto range = grid_strided_range<device::cpu, 0>(size);
     for(auto i = range.begin(); i < range.end(); i += range.stride())
-        dst[i] += static_cast<_Tp>(src[i]);
+        atomic_add(dst[i], src[i]);
+}
+
+//--------------------------------------------------------------------------------------//
+//
+template <typename _Tp, typename _Up, enable_if_t<(!is_pointer_v<_Up>::value), int> = 0>
+void
+atomic_add(_Tp* dst, const _Up& factor, uintmax_t size)
+{
+    auto range = grid_strided_range<device::cpu, 0>(size);
+    for(auto i = range.begin(); i < range.end(); i += range.stride())
+        atomic_add(dst[i], factor);
 }
 
 //--------------------------------------------------------------------------------------//

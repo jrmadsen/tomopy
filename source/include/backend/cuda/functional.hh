@@ -40,9 +40,8 @@
 
 #pragma once
 
-#include "backend/device.hh"
-#include "backend/ranges.hh"
 #include "environment.hh"
+#include "typedefs.hh"
 
 #include <atomic>
 #include <cuda.h>
@@ -148,12 +147,7 @@ static const cudaMemcpyKind              host_to_host_v     = cudaMemcpyHostToHo
 static const cudaMemcpyKind              host_to_device_v   = cudaMemcpyHostToDevice;
 static const cudaMemcpyKind              device_to_host_v   = cudaMemcpyDeviceToHost;
 static const cudaMemcpyKind              device_to_device_v = cudaMemcpyDeviceToDevice;
-
-template <bool B, typename T = char>
-using enable_if_t = impl::enable_if_t<B, T>;
-
-template <typename _Tp>
-using array_t = std::vector<_Tp>;
+static const float fepsilon = 2 * std::numeric_limits<float>::epsilon();
 
 inline int
 device_count();
@@ -171,11 +165,11 @@ struct interpolation
 
     static int mode(const std::string& preferred)
     {
-        EnvChoiceList<int> choices =
-            { EnvChoice<int>(nn(), "NN", "nearest neighbor interpolation"),
-              EnvChoice<int>(linear(), "LINEAR", "bilinear interpolation"),
-              EnvChoice<int>(cubic(), "CUBIC", "bicubic interpolation") };
-        return GetChoice<int>(choices, preferred);
+        env::choice_list_t<int> choices =
+            { env::choice_t<int>(nn(), "NN", "nearest neighbor interpolation"),
+              env::choice_t<int>(linear(), "LINEAR", "bilinear interpolation"),
+              env::choice_t<int>(cubic(), "CUBIC", "bicubic interpolation") };
+        return env::get_choice<int>(choices, preferred);
     }
 };
 
@@ -200,9 +194,23 @@ struct kernel_params
         return ((size + block_size - 1) / block_size);
     }
 
-    uint32_t block = get_env<uint32_t>("TOMOPY_BLOCK_SIZE", 32);
-    uint32_t grid  = get_env<uint32_t>("TOMOPY_GRID_SIZE", 0);  // 0 == compute
+    uint32_t block = env::get<uint32_t>("TOMOPY_BLOCK_SIZE", 32);
+    uint32_t grid  = env::get<uint32_t>("TOMOPY_GRID_SIZE", 0);  // 0 == compute
 };
+
+//--------------------------------------------------------------------------------------//
+// launch a kernel
+//
+#if defined(__NVCC__)
+template <typename _Func, typename... _Args>
+void
+launch(const kernel_params& params, int32_t size, stream_t stream, _Func&& f,
+       _Args&&... args)
+{
+    f<<<params.block, params.compute(size, params.block), 0, stream>>>(
+        std::forward<_Args>(args)...);
+}
+#endif
 
 //--------------------------------------------------------------------------------------//
 
@@ -260,6 +268,13 @@ get_error_string(error_t err)
 //      functions dealing with the device
 //
 //--------------------------------------------------------------------------------------//
+
+/// get whether device offload is enabled
+inline constexpr bool
+device_enabled()
+{
+    return true;
+}
 
 /// get the number of devices available
 inline int
@@ -374,6 +389,17 @@ template <typename _Tp>
 inline _Tp*
 malloc(size_t n)
 {
+    _Tp* arr;
+    CUDA_CHECK_CALL(cudaMalloc(&arr, n * sizeof(_Tp)));
+    return arr;
+}
+
+/// cpu malloc an shared array
+template <typename _Tp>
+inline _Tp*
+malloc_shared(size_t n)
+{
+    // cuda algorithms use atomicAdd so no need for an atomic type
     _Tp* arr;
     CUDA_CHECK_CALL(cudaMalloc(&arr, n * sizeof(_Tp)));
     return arr;

@@ -44,6 +44,7 @@
 #include "backend/ranges.hh"
 #include "environment.hh"
 #include "macros.hh"
+#include "typedefs.hh"
 
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
@@ -63,18 +64,13 @@ using error_t       = int;
 using memcpy_t      = int;
 using device_prop_t = int;
 // define some values for when CUDA is enabled
-static const int success_v          = 0;
-static const int err_not_ready_v    = 1;
-static const int host_to_host_v     = 0;
-static const int host_to_device_v   = 1;
-static const int device_to_host_v   = 2;
-static const int device_to_device_v = 3;
-
-template <bool B, typename T = char>
-using enable_if_t = impl::enable_if_t<B, T>;
-
-template <typename _Tp>
-using array_t = std::vector<_Tp>;
+static const int   success_v          = 0;
+static const int   err_not_ready_v    = 1;
+static const int   host_to_host_v     = 0;
+static const int   host_to_device_v   = 1;
+static const int   device_to_host_v   = 2;
+static const int   device_to_device_v = 3;
+static const float fepsilon           = 2 * std::numeric_limits<float>::epsilon();
 
 struct interpolation
 {
@@ -84,11 +80,11 @@ struct interpolation
 
     static int mode(const std::string& preferred)
     {
-        EnvChoiceList<int> choices =
-            { EnvChoice<int>(nn(), "NN", "nearest neighbor interpolation"),
-              EnvChoice<int>(linear(), "LINEAR", "bilinear interpolation"),
-              EnvChoice<int>(cubic(), "CUBIC", "bicubic interpolation") };
-        return GetChoice<int>(choices, preferred);
+        env::choice_list_t<int> choices =
+            { env::choice_t<int>(nn(), "NN", "nearest neighbor interpolation"),
+              env::choice_t<int>(linear(), "LINEAR", "bilinear interpolation"),
+              env::choice_t<int>(cubic(), "CUBIC", "bicubic interpolation") };
+        return env::get_choice<int>(choices, preferred);
     }
 };
 
@@ -113,9 +109,19 @@ struct kernel_params
         return ((size + block_size - 1) / block_size);
     }
 
-    uint32_t block = get_env<uint32_t>("TOMOPY_BLOCK_SIZE", 32);
-    uint32_t grid  = get_env<uint32_t>("TOMOPY_GRID_SIZE", 0);  // 0 == compute
+    uint32_t block = env::get<uint32_t>("TOMOPY_BLOCK_SIZE", 32);
+    uint32_t grid  = env::get<uint32_t>("TOMOPY_GRID_SIZE", 0);  // 0 == compute
 };
+
+//--------------------------------------------------------------------------------------//
+// launch a kernel
+//
+template <typename _Func, typename... _Args>
+void
+launch(const kernel_params&, int32_t, stream_t, _Func&& f, _Args&&... args)
+{
+    f(std::forward<_Args>(args)...);
+}
 
 //--------------------------------------------------------------------------------------//
 
@@ -171,6 +177,13 @@ get_error_string(error_t err)
 //      functions dealing with the device
 //
 //--------------------------------------------------------------------------------------//
+
+/// get whether device offload is enabled
+inline constexpr bool
+device_enabled()
+{
+    return false;
+}
 
 /// get the number of devices available
 inline int
@@ -232,6 +245,14 @@ malloc(size_t n)
     return new _Tp[n];
 }
 
+/// cpu malloc an shared array
+template <typename _Tp>
+inline std::atomic<_Tp>*
+malloc_shared(size_t n)
+{
+    return new std::atomic<_Tp>[n];
+}
+
 /// cpu malloc
 template <typename _Tp>
 inline void
@@ -256,6 +277,14 @@ inline void
 memset(_Tp* dst, const int& value, size_t n, stream_t = 0)
 {
     std::memset(dst, value, n * sizeof(_Tp));
+}
+
+template <typename _Tp>
+inline void
+memset(std::atomic<_Tp>* dst, const int& value, size_t n, stream_t = 0)
+{
+    for(size_t i = 0; i < n; ++i)
+        dst[i].store(value);
 }
 
 }  // namespace opencv

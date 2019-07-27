@@ -59,88 +59,90 @@ void
 consume_parameters(_Args...)
 {}
 
+namespace env
+{
 //--------------------------------------------------------------------------------------//
 // a non-string environment option with a string identifier
 template <typename _Tp>
-using EnvChoice = std::tuple<_Tp, std::string, std::string>;
+using choice_t = std::tuple<_Tp, std::string, std::string>;
 
 //--------------------------------------------------------------------------------------//
 // list of environment choices with non-string and string identifiers
 template <typename _Tp>
-using EnvChoiceList = std::set<EnvChoice<_Tp>>;
+using choice_list_t = std::set<choice_t<_Tp>>;
 
 //--------------------------------------------------------------------------------------//
 
-class EnvSettings
+class Settings
 {
 public:
-    typedef std::mutex                        mutex_t;
-    typedef std::string                       string_t;
-    typedef std::multimap<string_t, string_t> env_map_t;
-    typedef std::pair<string_t, string_t>     env_pair_t;
+    using mutex_t  = std::mutex;
+    using string_t = std::string;
+    using map_t    = std::multimap<string_t, string_t>;
+    using pair_t   = std::pair<string_t, string_t>;
 
 public:
-    static EnvSettings* GetInstance()
+    static Settings* instance()
     {
-        static EnvSettings* _instance = new EnvSettings();
+        static Settings* _instance = new Settings();
         return _instance;
     }
 
 public:
     template <typename _Tp>
-    void insert(const std::string& env_id, _Tp val)
+    void insert(const string_t& id, _Tp val)
     {
         std::stringstream ss;
         ss << std::boolalpha << val;
         m_mutex.lock();
-        if(m_env.find(env_id) != m_env.end())
+        if(m_env.find(id) != m_env.end())
         {
             for(const auto& itr : m_env)
-                if(itr.first == env_id && itr.second == ss.str())
+                if(itr.first == id && itr.second == ss.str())
                 {
                     m_mutex.unlock();
                     return;
                 }
         }
-        m_env.insert(env_pair_t(env_id, ss.str()));
+        m_env.insert(pair_t(id, ss.str()));
         m_mutex.unlock();
     }
 
     template <typename _Tp>
-    void insert(const std::string& env_id, EnvChoice<_Tp> choice)
+    void insert(const string_t& id, choice_t<_Tp> choice)
     {
-        _Tp&         val      = std::get<0>(choice);
-        std::string& str_val  = std::get<1>(choice);
-        std::string& descript = std::get<2>(choice);
+        _Tp&      val      = std::get<0>(choice);
+        string_t& str_val  = std::get<1>(choice);
+        string_t& descript = std::get<2>(choice);
 
         std::stringstream ss, ss_long;
         ss << std::boolalpha << val;
         ss_long << std::boolalpha << std::setw(8) << std::left << val << " # (\""
                 << str_val << "\") " << descript;
         m_mutex.lock();
-        if(m_env.find(env_id) != m_env.end())
+        if(m_env.find(id) != m_env.end())
         {
             for(const auto& itr : m_env)
-                if(itr.first == env_id && itr.second == ss.str())
+                if(itr.first == id && itr.second == ss.str())
                 {
                     m_mutex.unlock();
                     return;
                 }
         }
-        m_env.insert(env_pair_t(env_id, ss_long.str()));
+        m_env.insert(pair_t(id, ss_long.str()));
         m_mutex.unlock();
     }
 
-    const env_map_t& get() const { return m_env; }
-    mutex_t&         mutex() const { return m_mutex; }
+    const map_t& get() const { return m_env; }
+    mutex_t&     mutex() const { return m_mutex; }
 
-    friend std::ostream& operator<<(std::ostream& os, const EnvSettings& env)
+    friend std::ostream& operator<<(std::ostream& os, const Settings& env)
     {
         std::stringstream filler;
         filler.fill('#');
         filler << std::setw(90) << "";
         std::stringstream ss;
-        ss << filler.str() << "\n# Environment settings:\n";
+        ss << filler.str() << "\n# Environment Settings:\n";
         env.mutex().lock();
         for(const auto& itr : env.get())
         {
@@ -154,7 +156,7 @@ public:
     }
 
 private:
-    env_map_t       m_env;
+    map_t           m_env;
     mutable mutex_t m_mutex;
 };
 
@@ -162,12 +164,12 @@ private:
 //  use this function to get an environment variable setting +
 //  a default if not defined, e.g.
 //      int num_threads =
-//          get_env<int>("FORCENUMBEROFTHREADS",
+//          get<int>("FORCENUMBEROFTHREADS",
 //                          std::thread::hardware_concurrency());
 //
 template <typename _Tp>
 _Tp
-get_env(const std::string& env_id, _Tp _default = _Tp())
+get(const std::string& env_id, _Tp _default = _Tp())
 {
     char* env_var = std::getenv(env_id.c_str());
     if(env_var)
@@ -177,11 +179,11 @@ get_env(const std::string& env_id, _Tp _default = _Tp())
         _Tp                var = _Tp();
         iss >> var;
         // record value defined by environment
-        EnvSettings::GetInstance()->insert<_Tp>(env_id, var);
+        Settings::instance()->insert<_Tp>(env_id, var);
         return var;
     }
     // record default value
-    EnvSettings::GetInstance()->insert<_Tp>(env_id, _default);
+    Settings::instance()->insert<_Tp>(env_id, _default);
 
     // return default if not specified in environment
     return _default;
@@ -192,7 +194,7 @@ get_env(const std::string& env_id, _Tp _default = _Tp())
 //
 template <>
 inline bool
-get_env(const std::string& env_id, bool _default)
+get(const std::string& env_id, bool _default)
 {
     char* env_var = std::getenv(env_id.c_str());
     if(env_var)
@@ -209,22 +211,22 @@ get_env(const std::string& env_id, bool _default)
                 val = false;
         }
         // record value defined by environment
-        EnvSettings::GetInstance()->insert<bool>(env_id, val);
+        Settings::instance()->insert<bool>(env_id, val);
         return val;
     }
     // record default value
-    EnvSettings::GetInstance()->insert<bool>(env_id, false);
+    Settings::instance()->insert<bool>(env_id, false);
 
     // return default if not specified in environment
     return _default;
 }
 
 //--------------------------------------------------------------------------------------//
-//  overload for get_env + message when set
+//  overload for get + message when set
 //
 template <typename _Tp>
 _Tp
-get_env(const std::string& env_id, _Tp _default, const std::string& msg)
+get(const std::string& env_id, _Tp _default, const std::string& msg)
 {
     char* env_var = std::getenv(env_id.c_str());
     if(env_var)
@@ -236,11 +238,11 @@ get_env(const std::string& env_id, _Tp _default, const std::string& msg)
         std::cout << "Environment variable \"" << env_id << "\" enabled with "
                   << "value == " << var << ". " << msg << std::endl;
         // record value defined by environment
-        EnvSettings::GetInstance()->insert<_Tp>(env_id, var);
+        Settings::instance()->insert<_Tp>(env_id, var);
         return var;
     }
     // record default value
-    EnvSettings::GetInstance()->insert<_Tp>(env_id, _default);
+    Settings::instance()->insert<_Tp>(env_id, _default);
 
     // return default if not specified in environment
     return _default;
@@ -249,16 +251,16 @@ get_env(const std::string& env_id, _Tp _default, const std::string& msg)
 //--------------------------------------------------------------------------------------//
 //  use this function to get an environment variable setting from set of choices
 //
-//      EnvChoiceList<int> choices =
-//              { EnvChoice<int>(NN,     "NN",     "nearest neighbor interpolation"),
-//                EnvChoice<int>(LINEAR, "LINEAR", "bilinear interpolation"),
-//                EnvChoice<int>(CUBIC,  "CUBIC",  "bicubic interpolation") };
+//      choice_list_t<int> choices =
+//              { env::choice_t<int>(NN,     "NN",     "nearest neighbor interpolation"),
+//                env::choice_t<int>(LINEAR, "LINEAR", "bilinear interpolation"),
+//                env::choice_t<int>(CUBIC,  "CUBIC",  "bicubic interpolation") };
 //
-//      int eInterp = get_env<int>("INTERPOLATION", choices, CUBIC);
+//      int eInterp = get<int>("INTERPOLATION", choices, CUBIC);
 //
 template <typename _Tp>
 _Tp
-get_env(const std::string& env_id, const EnvChoiceList<_Tp>& _choices, _Tp _default)
+get(const std::string& env_id, const choice_list_t<_Tp>& _choices, _Tp _default)
 {
     auto asupper = [](std::string var) {
         for(auto& itr : var)
@@ -278,7 +280,7 @@ get_env(const std::string& env_id, const EnvChoiceList<_Tp>& _choices, _Tp _defa
             if(asupper(std::get<1>(itr)) == upp_var)
             {
                 // record value defined by environment
-                EnvSettings::GetInstance()->insert(env_id, itr);
+                Settings::instance()->insert(env_id, itr);
                 return std::get<0>(itr);
             }
         }
@@ -290,7 +292,7 @@ get_env(const std::string& env_id, const EnvChoiceList<_Tp>& _choices, _Tp _defa
             if(var == std::get<0>(itr))
             {
                 // record value defined by environment
-                EnvSettings::GetInstance()->insert(env_id, itr);
+                Settings::instance()->insert(env_id, itr);
                 return var;
             }
         }
@@ -317,7 +319,7 @@ get_env(const std::string& env_id, const EnvChoiceList<_Tp>& _choices, _Tp _defa
         }
 
     // record default value
-    EnvSettings::GetInstance()->insert(env_id, EnvChoice<_Tp>(_default, _name, _desc));
+    Settings::instance()->insert(env_id, env::choice_t<_Tp>(_default, _name, _desc));
 
     // return default if not specified in environment
     return _default;
@@ -327,7 +329,7 @@ get_env(const std::string& env_id, const EnvChoiceList<_Tp>& _choices, _Tp _defa
 
 template <typename _Tp>
 _Tp
-GetChoice(const EnvChoiceList<_Tp>& _choices, const std::string str_var)
+get_choice(const choice_list_t<_Tp>& _choices, const std::string str_var)
 {
     auto asupper = [](std::string var) {
         for(auto& itr : var)
@@ -371,9 +373,11 @@ GetChoice(const EnvChoiceList<_Tp>& _choices, const std::string str_var)
 //--------------------------------------------------------------------------------------//
 
 inline void
-PrintEnv(std::ostream& os = std::cout)
+print(std::ostream& os = std::cout)
 {
-    os << (*EnvSettings::GetInstance());
+    os << (*Settings::instance());
 }
 
 //--------------------------------------------------------------------------------------//
+
+}  // namespace env

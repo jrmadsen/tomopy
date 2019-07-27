@@ -46,17 +46,13 @@
 
 #pragma once
 
-#include "backend/opencv.hh"
+#include "backend/device.hh"
 #include "common.hh"
 #include "constants.hh"
 #include "macros.hh"
 #include "options.hh"
 #include "typedefs.hh"
 #include "utils.hh"
-
-#if defined(TOMOPY_USE_CUDA)
-#    include "backend/cuda.hh"
-#endif
 
 #include <array>
 #include <atomic>
@@ -85,17 +81,15 @@ struct Registration
         {
             std::stringstream ss;
             ss << *opts << std::endl;
-#if defined(TOMOPY_USE_CUDA)
-            for(int i = 0; i < cuda::device_count(); ++i)
+            for(int i = 0; i < device_count(); ++i)
             {
                 // set the device
-                cudaSetDevice(i);
+                set_device(i);
                 // sync the device
-                cudaDeviceSynchronize();
+                device_sync();
                 // reset the device
-                cudaDeviceReset();
+                device_reset();
             }
-#endif
         }
         else
         {

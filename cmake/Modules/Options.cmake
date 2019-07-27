@@ -36,6 +36,12 @@ else()
     set(_USE_CUDA OFF)
 endif()
 
+# general settings
+set(BUILD_STATIC_LIBS               ON  CACHE BOOL "Build static libraries")
+set(BUILD_SHARED_LIBS               OFF CACHE BOOL "Build shared libraries")
+set(PTL_DEVELOPER_INSTALL           OFF CACHE BOOL "Install headers, cmake export, and shared libs" FORCE)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON  CACHE BOOL "Position independent code" FORCE)
+
 # features
 add_feature(CMAKE_BUILD_TYPE "Build type (Debug, Release, RelWithDebInfo, MinSizeRel)")
 add_feature(CMAKE_INSTALL_PREFIX "Installation prefix")

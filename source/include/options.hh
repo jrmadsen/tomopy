@@ -46,15 +46,12 @@
 
 #pragma once
 
+#include "backend/device.hh"
 #include "common.hh"
 #include "constants.hh"
 #include "macros.hh"
 #include "typedefs.hh"
 #include "utils.hh"
-
-#if defined(TOMOPY_USE_CUDA)
-#    include "backend/cuda.hh"
-#endif
 
 #include <array>
 #include <atomic>
@@ -190,30 +187,27 @@ public:
 inline DeviceOption
 GetDevice(const std::string& preferred)
 {
-    auto pythreads               = get_env("TOMOPY_PYTHON_THREADS", HW_CONCURRENCY);
+    auto pythreads               = env::get("TOMOPY_PYTHON_THREADS", HW_CONCURRENCY);
     using DeviceOptionList       = std::deque<DeviceOption>;
     DeviceOptionList options     = { DeviceOption(0, "cpu", "Run on CPU (OpenCV)") };
     std::string      default_key = "cpu";
 
-#if defined(TOMOPY_USE_CUDA)
-    auto num_devices = cuda::device_count();
-    if(num_devices > 0)
+    if(device_enabled() && device_count() > 0)
     {
         options.push_back(DeviceOption(1, "gpu", "Run on GPU (CUDA NPP)"));
         default_key = "gpu";
-#    if defined(TOMOPY_USE_NVTX)
+#if defined(TOMOPY_USE_NVTX)
         // initialize nvtx data
         init_nvtx();
-#    endif
+#endif
         // print device info
-        cuda::device_query();
+        device_query();
     }
     else
     {
         AutoLock l(TypeMutex<decltype(std::cout)>());
         std::cerr << "\n##### No CUDA device(s) available #####\n" << std::endl;
     }
-#endif
 
     // find the default entry
     auto default_itr =
@@ -309,17 +303,17 @@ struct RuntimeOptions
         memcpy(grid_size.data(), _grid_size, 3 * sizeof(int));
         memcpy(block_size.data(), _block_size, 3 * sizeof(int));
 
-        if(device.key == "gpu")
+        interpolation = interpolation::mode(_interp);
+        if(device.key == "gpu" && !device_enabled())
         {
-#if defined(TOMOPY_USE_CUDA)
-            interpolation = cuda::interpolation::mode(_interp);
-#else
-            interpolation = opencv::interpolation::mode(_interp);
-#endif
+            throw std::runtime_error(
+                "Error! Selected device 'gpu' is not available without CUDA support!");
         }
-        else
+        else if(device.key == "cpu" && device_count() == 0)
         {
-            interpolation = opencv::interpolation::mode(_interp);
+            throw std::runtime_error("Error! The device count returned zero. It appears "
+                                     "tomopy was not compiled with "
+                                     "OpenCV or CUDA support.");
         }
     }
 
@@ -350,11 +344,11 @@ struct RuntimeOptions
         // tuple of objects to print
         using ObjectType = std::tuple<_Objects...>;
         // the operator that does the printing (see end of
-        using UnrollType = std::tuple<impl::GenericPrinter<_Objects>...>;
+        using UnrollType = std::tuple<GenericPrinter<_Objects>...>;
 
-        impl::apply::unroll<UnrollType>(std::forward<DescriptType>(_descripts),
-                                        std::forward<ObjectType>(_objs), std::ref(os),
-                                        _prefix_width, _obj_width, format_flags, endline);
+        apply::unroll<UnrollType>(std::forward<DescriptType>(_descripts),
+                                  std::forward<ObjectType>(_objs), std::ref(os),
+                                  _prefix_width, _obj_width, format_flags, endline);
     }
 
     // overload the output operator for the class

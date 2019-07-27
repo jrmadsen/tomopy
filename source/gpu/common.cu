@@ -37,9 +37,10 @@
 //  ---------------------------------------------------------------
 //   TOMOPY CUDA implementation
 
-#include "backend/cuda.hh"
+#include "backend/cuda/functional.hh"
 #include "common.hh"
 #include "macros.hh"
+#include "typedefs.hh"
 #include "utils.hh"
 
 //======================================================================================//
@@ -113,7 +114,7 @@ init_nvtx()
 void
 cuda::device_query()
 {
-    auto pythreads = get_env("TOMOPY_PYTHON_THREADS", HW_CONCURRENCY);
+    auto pythreads = env::get("TOMOPY_PYTHON_THREADS", HW_CONCURRENCY);
     static std::atomic<int16_t> _once;
     auto                        _count = _once++;
     if(_count + 1 == pythreads)

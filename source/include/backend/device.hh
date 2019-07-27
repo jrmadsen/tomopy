@@ -53,10 +53,42 @@
 #    define GLOBAL_CALLABLE
 #endif
 
+//#if defined(TOMOPY_USE_OPENCV)
+//#endif
+
+#if defined(TOMOPY_USE_CUDA)
+#    include "backend/cuda/functional.hh"
+#else
+#    include "backend/opencv/functional.hh"
+#endif
+
 namespace device
 {
 struct cpu
 {};
 struct gpu
 {};
+
 }  // namespace device
+
+#if defined(TOMOPY_USE_CUDA)
+
+using cuda::device_count;
+using cuda::device_enabled;
+using cuda::device_query;
+using cuda::device_reset;
+using cuda::device_sync;
+using cuda::interpolation;
+using cuda::set_device;
+
+#else
+
+using opencv::device_count;
+using opencv::device_enabled;
+using opencv::device_query;
+using opencv::device_reset;
+using opencv::device_sync;
+using opencv::interpolation;
+using opencv::set_device;
+
+#endif

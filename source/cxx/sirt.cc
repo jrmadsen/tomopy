@@ -37,8 +37,8 @@
 //  ---------------------------------------------------------------
 //   TOMOPY implementation
 
-#include "backend/opencv.hh"
-#include "backend/opencv_algorithms.hh"
+#include "backend/opencv/algorithm.hh"
+#include "backend/opencv/functional.hh"
 #include "backend/ranges.hh"
 #include "common.hh"
 #include "data.hh"
@@ -80,7 +80,7 @@ cxx_sirt(const float* data, int dy, int dt, int dx, const float* center,
     // local count for the thread
     int count = registration.initialize();
     // number of threads started at Python level
-    auto tcount = get_env("TOMOPY_PYTHON_THREADS", HW_CONCURRENCY);
+    auto tcount = env::get("TOMOPY_PYTHON_THREADS", HW_CONCURRENCY);
 
     // configured runtime options
     RuntimeOptions opts(pool_size, interp, device, grid_size, block_size);
@@ -138,7 +138,7 @@ pixels_kernel(int p, int dx, int nx, int ny, float* recon, const float* data, fl
     // ny == ngridy
     // compute simdata
 
-//#define MANUAL_UNROLL
+    //#define MANUAL_UNROLL
 
 #if defined(MANUAL_UNROLL)
     constexpr size_t unroll_length = 32;
@@ -159,13 +159,13 @@ pixels_kernel(int p, int dx, int nx, int ny, float* recon, const float* data, fl
         };
 
         for(size_t d = 0; d < dx_end_unroll; ++d)
-            impl::apply::loop_unroll<unroll_length>(func, d * unroll_length);
+            apply::loop_unroll<unroll_length>(func, d * unroll_length);
 
         for(size_t d = dx_end_unroll; d < dx_end_unroll + dx_end_modulo; ++d)
             func(0, d);
 #else
         for(int d = dx_range.begin(); d < dx_range.end(); d += dx_range.stride())
-            sum[d] += recon[i * nx + d];
+            sum[d] += _recon[d];
 #endif
     }
 
@@ -179,7 +179,7 @@ pixels_kernel(int p, int dx, int nx, int ny, float* recon, const float* data, fl
         };
 
         for(size_t d = 0; d < dx_end_unroll; ++d)
-            impl::apply::loop_unroll<unroll_length>(func, d * unroll_length);
+            apply::loop_unroll<unroll_length>(func, d * unroll_length);
 
         for(size_t d = dx_end_unroll; d < dx_end_unroll + dx_end_modulo; ++d)
             func(0, d);
@@ -192,9 +192,9 @@ pixels_kernel(int p, int dx, int nx, int ny, float* recon, const float* data, fl
 
 //======================================================================================//
 
+template <typename _Tp, typename _Up>
 void
-update_kernel(float* recon, const float* update, const int32_t* sum_dist, int dx,
-              int size)
+update_kernel(_Tp* recon, const _Up* update, const int32_t* sum_dist, int dx, int size)
 {
     if(dx == 0)
         return;
@@ -202,10 +202,10 @@ update_kernel(float* recon, const float* update, const int32_t* sum_dist, int dx
     float fdx   = static_cast<float>(dx);
     for(int i = range.begin(); i < range.end(); i += range.stride())
     {
-        auto  sum = sum_dist[i];
-        float upd = update[i];
+        auto sum = sum_dist[i];
+        _Tp  upd = update[i];
         if(sum != 0)
-            recon[i] += upd / static_cast<float>(sum) / fdx;
+            recon[i] *= upd / static_cast<float>(sum) / fdx;
     }
 }
 
@@ -224,18 +224,19 @@ sirt_cpu(const float* data, int dy, int dt, int dx, const float* center,
 
     TIMEMORY_AUTO_TIMER("");
 
-    auto      interp       = opts->interpolation;
-    uintmax_t recon_pixels = static_cast<uintmax_t>(dy * nx * ny);
-    float*    update       = opencv::malloc<float>(recon_pixels);
-    float*    plus_rot     = opencv::malloc<float>(recon_pixels);
-    float*    back_rot     = opencv::malloc<float>(recon_pixels);
-    float*    sum_rot      = opencv::malloc<float>(dx);
-    int32_t*  sum_dist = opencv::compute_sum_dist(dy, dt, dx, nx, ny, theta, center[0]);
+    auto  interp       = opts->interpolation;
+    auto  recon_pixels = static_cast<uintmax_t>(dy * nx * ny);
+    auto* update       = opencv::malloc_shared<float>(recon_pixels);
+    auto* plus_rot     = opencv::malloc<float>(recon_pixels);
+    auto* back_rot     = opencv::malloc<float>(recon_pixels);
+    auto* sum_rot      = opencv::malloc<float>(dx);
+    auto* sum_dist     = opencv::compute_sum_dist(dy, dt, dx, nx, ny, theta, center[0]);
 
-    auto get_slice = [&](float* arr, const int& s) { return arr + s * nx * ny; };
+    using atomic_f4_t = std::atomic<float>;
+    auto get_slice    = [&](float* arr, const int& s) { return arr + s * nx * ny; };
+    auto get_slice_a  = [&](atomic_f4_t* arr, const int& s) { return arr + s * nx * ny; };
 
-    for(uintmax_t i = 0; i < recon_pixels; ++i)
-        recon[i] += 2 * std::numeric_limits<float>::epsilon();
+    opencv::atomic_add(recon, opencv::fepsilon, recon_pixels);
 
     for(int i = 0; i < num_iter; i++)
     {
@@ -258,7 +259,7 @@ sirt_cpu(const float* data, int dy, int dt, int dx, const float* center,
                 opencv::memset(sum_rot, 0, dx);
 
                 auto* s_recon    = get_slice(recon, s);
-                auto* s_update   = get_slice(update, s);
+                auto* s_update   = get_slice_a(update, s);
                 auto* s_data     = data + s * dt * dx;
                 auto* s_plus_rot = get_slice(plus_rot, s);
                 auto* s_back_rot = get_slice(back_rot, s);
@@ -267,7 +268,7 @@ sirt_cpu(const float* data, int dy, int dt, int dx, const float* center,
                 pixels_kernel(p, dx, nx, ny, s_plus_rot, s_data, sum_rot);
                 opencv::rotate(s_back_rot, s_plus_rot, theta_p, center[s], nx, ny,
                                interp);
-                opencv::atomic_sum(s_update, s_back_rot, nx * ny);
+                opencv::atomic_add(s_update, s_back_rot, nx * ny);
             }
         }
 

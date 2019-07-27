@@ -64,14 +64,44 @@ using iarray_t      = array_t<int32_t>;
 using farray_t      = array_t<float>;
 using darray_t      = array_t<double>;
 using num_threads_t = decltype(std::thread::hardware_concurrency());
-using AutoLock      = std::unique_lock<std::mutex>;
+using mutex_t       = std::mutex;
+
+#if !defined(TOMOPY_USE_PTL)
+using AutoLock = std::unique_lock<mutex_t>;
 
 template <typename _Tp>
-std::mutex&
+mutex_t&
 TypeMutex()
 {
-    static std::mutex _instance;
+    static mutex_t _instance;
     return _instance;
 }
+#else
+#    include "PTL/AutoLock.hh"
+#endif
+
+//======================================================================================//
+
+namespace impl
+{
+/// Alias template for enable_if
+template <bool B, typename T>
+using enable_if_t = typename std::enable_if<B, T>::type;
+
+/// Alias template for decay
+template <class T>
+using decay_t = typename std::decay<T>::type;
+
+}  // namespace impl
+
+template <bool B, typename T = char>
+using enable_if_t = impl::enable_if_t<B, T>;
+
+template <typename _Tp>
+struct is_pointer_v
+{
+    using value_type                  = decltype(std::is_pointer<_Tp>::value);
+    constexpr static value_type value = std::is_pointer<_Tp>::value;
+};
 
 //======================================================================================//

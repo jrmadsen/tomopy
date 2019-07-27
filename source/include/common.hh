@@ -44,11 +44,6 @@
 #include "macros.hh"
 #include "typedefs.hh"
 
-#include "backend/opencv.hh"
-#if defined(TOMOPY_USE_CUDA)
-#    include "backend/cuda.hh"
-#endif
-
 BEGIN_EXTERN_C
 #include "cxx_extern.h"
 END_EXTERN_C
@@ -88,16 +83,6 @@ operator<<(std::ostream& os, const std::array<_Tp, _N>& arr)
 //
 namespace impl
 {
-//
-//----------------------------------------------------------------------------------//
-/// Alias template for enable_if
-template <bool B, typename T>
-using enable_if_t = typename std::enable_if<B, T>::type;
-
-/// Alias template for decay
-template <class T>
-using decay_t = typename std::decay<T>::type;
-
 struct apply_impl
 {
     //----------------------------------------------------------------------------------//
@@ -155,6 +140,8 @@ struct apply_impl
     }
 };
 
+}  // end namespace impl
+
 //======================================================================================//
 
 struct apply
@@ -162,10 +149,11 @@ struct apply
     //----------------------------------------------------------------------------------//
     // invoke the recursive expansion
     template <typename _Operator, typename _TupleA, typename _TupleB, typename... _Args,
-              std::size_t _N  = std::tuple_size<decay_t<_TupleA>>::value,
-              std::size_t _Nb = std::tuple_size<decay_t<_TupleB>>::value>
+              std::size_t _N  = std::tuple_size<impl::decay_t<_TupleA>>::value,
+              std::size_t _Nb = std::tuple_size<impl::decay_t<_TupleB>>::value>
     static void unroll(_TupleA&& _tupA, _TupleB&& _tupB, _Args&&... _args)
     {
+        using namespace impl;
         static_assert(_N == _Nb, "tuple_size A must match tuple_size B");
         apply_impl::template unroll<0, _N - 1, _Operator, _TupleA, _TupleB, _Args...>(
             std::forward<_TupleA>(_tupA), std::forward<_TupleB>(_tupB),
@@ -177,6 +165,7 @@ struct apply
     template <size_t _N, typename _Func, typename... _Args>
     TOMOPY_LAMBDA static void loop_unroll(_Func&& __func, _Args&&... __args)
     {
+        using namespace impl;
         apply_impl::template loop_unroll<_N, _N, _Func, _Args...>(
             std::forward<_Func>(__func), std::forward<_Args>(__args)...);
     }
@@ -201,5 +190,3 @@ struct GenericPrinter
         os << ss.str();
     }
 };
-
-}  // end namespace impl

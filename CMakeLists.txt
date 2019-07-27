@@ -37,8 +37,8 @@ include(Options)
 include(GNUInstallDirs)
 include(ProjectSettings)
 include(BuildSettings)
-include(Packages)
 include(ClangFormat)
+include(Packages)
 
 ################################################################################
 #   tomopy source
