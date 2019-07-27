@@ -148,6 +148,7 @@ if(TOMOPY_USE_OPENMP)
             # C++
             if(OpenMP_CXX_FOUND)
                 list(APPEND ${PROJECT_NAME}_CXX_FLAGS ${OpenMP_CXX_FLAGS})
+                list(APPEND EXTERNAL_LIBRARIES ${OpenMP_CXX_FLAGS})
             endif()
         else()
             message(WARNING "OpenMP not found")
@@ -175,9 +176,24 @@ if(TOMOPY_USE_CUDA)
     get_property(LANGUAGES GLOBAL PROPERTY ENABLED_LANGUAGES)
 
     if("CUDA" IN_LIST LANGUAGES)
-        list(APPEND ${PROJECT_NAME}_DEFINITIONS TOMOPY_USE_CUDA)
-        add_feature(${PROJECT_NAME}_CUDA_FLAGS "CUDA NVCC compiler flags")
-        add_feature(CUDA_ARCH "CUDA architecture (e.g. '35' means '-arch=sm_35')")
+        add_interface_library(tomopy-cuda)
+
+        target_compile_definitions(tomopy-cuda INTERFACE TIMEMORY_USE_CUDA)
+        target_include_directories(tomopy-cuda INTERFACE ${CUDA_INCLUDE_DIRS}
+            ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
+
+        set_target_properties(tomopy-cuda PROPERTIES
+            INTERFACE_CUDA_STANDARD                 ${CMAKE_CUDA_STANDARD}
+            INTERFACE_CUDA_STANDARD_REQUIRED        ${CMAKE_CUDA_STANDARD_REQUIRED}
+            INTERFACE_CUDA_RESOLVE_DEVICE_SYMBOLS   ON
+            INTERFACE_CUDA_SEPARABLE_COMPILATION    ON)
+
+        set(CUDA_AUTO_ARCH "auto")
+        set(CUDA_ARCHITECTURES auto kepler tesla maxwell pascal volta turing)
+        set(CUDA_ARCH "${CUDA_AUTO_ARCH}" CACHE STRING
+            "CUDA architecture (options: ${CUDA_ARCHITECTURES})")
+        add_feature(CUDA_ARCH "CUDA architecture (options: ${CUDA_ARCHITECTURES})")
+        set_property(CACHE CUDA_ARCH PROPERTY STRINGS ${CUDA_ARCHITECTURES})
 
         #   30, 32      + Kepler support
         #               + Unified memory programming
@@ -186,32 +202,107 @@ if(TOMOPY_USE_CUDA)
         #   60, 61, 62  + Pascal support
         #   70, 72      + Volta support
         #   75          + Turing support
-        if(NOT DEFINED CUDA_ARCH)
-            set(CUDA_ARCH "35")
+        set(cuda_kepler_arch    30)
+        set(cuda_tesla_arch     35)
+        set(cuda_maxwell_arch   50)
+        set(cuda_pascal_arch    60)
+        set(cuda_volta_arch     70)
+        set(cuda_turing_arch    75)
+
+        if(NOT "${CUDA_ARCH}" STREQUAL "${CUDA_AUTO_ARCH}")
+            if(NOT "${CUDA_ARCH}" IN_LIST CUDA_ARCHITECTURES)
+                message(WARNING "CUDA architecture \"${CUDA_ARCH}\" not known. Options: ${CUDA_ARCHITECTURES}")
+                unset(CUDA_ARCH CACHE)
+                unset(CUDA_ARCH )
+                set(CUDA_ARCH "${CUDA_AUTO_ARCH}")
+            else()
+                set(_ARCH_NUM ${cuda_${CUDA_ARCH}_arch})
+            endif()
         endif()
+
+        string(REPLACE "." ";" CUDA_MAJOR_VERSION "${CUDA_VERSION}")
+        list(GET CUDA_MAJOR_VERSION 0 CUDA_MAJOR_VERSION)
+
+        set(cuda_version_arch_fallback  35)
+        set(cuda_version_arch_10        50)
+        set(cuda_version_arch_9         50)
+        set(cuda_version_arch_8         30)
+
+        set(CUDA_ARCH_NUM 50)
+        if("${CUDA_ARCH}" STREQUAL "${CUDA_AUTO_ARCH}")
+            set(CUDA_ARCH_NUM ${_ARCH_NUM})
+        else()
+            set(CUDA_ARCH_NUM ${cuda_version_arch_${CUDA_MAJOR_VERSION}})
+        endif()
+
+        if(NOT CUDA_ARCH_NUM)
+            set(CUDA_ARCH_NUM ${cuda_version_arch_fallback})
+        endif()
+
+        if(CUDA_MAJOR_VERSION VERSION_GREATER 10 OR CUDA_MAJOR_VERSION MATCHES 10)
+            target_compile_options(tomopy-cuda INTERFACE $<$<COMPILE_LANGUAGE:CUDA>:
+                -arch=sm_${CUDA_ARCH_NUM}
+                -gencode=arch=compute_50,code=sm_50
+                -gencode=arch=compute_52,code=sm_52
+                -gencode=arch=compute_60,code=sm_60
+                -gencode=arch=compute_61,code=sm_61
+                -gencode=arch=compute_70,code=sm_70
+                -gencode=arch=compute_75,code=sm_75
+                -gencode=arch=compute_75,code=compute_75
+                >)
+        elseif(CUDA_MAJOR_VERSION MATCHES 9)
+            set(CUDA_ARCH_NUM 50)
+            if("${CUDA_ARCH}" STREQUAL "${CUDA_AUTO_ARCH}")
+                set(CUDA_ARCH_NUM ${_ARCH_NUM})
+            endif()
+            target_compile_options(tomopy-cuda INTERFACE $<$<COMPILE_LANGUAGE:CUDA>:
+                -arch=sm_${CUDA_ARCH_NUM}
+                -gencode=arch=compute_50,code=sm_50
+                -gencode=arch=compute_52,code=sm_52
+                -gencode=arch=compute_60,code=sm_60
+                -gencode=arch=compute_61,code=sm_61
+                -gencode=arch=compute_70,code=sm_70
+                -gencode=arch=compute_70,code=compute_70
+                >)
+        elseif(CUDA_MAJOR_VERSION MATCHES 8)
+            set(CUDA_ARCH_NUM 30)
+            if("${CUDA_ARCH}" STREQUAL "${CUDA_AUTO_ARCH}")
+                set(CUDA_ARCH_NUM ${_ARCH_NUM})
+            endif()
+            target_compile_options(tomopy-cuda INTERFACE $<$<COMPILE_LANGUAGE:CUDA>:
+                -arch=sm_${CUDA_ARCH_NUM}
+                -gencode=arch=compute_20,code=sm_20
+                -gencode=arch=compute_30,code=sm_30
+                -gencode=arch=compute_50,code=sm_50
+                -gencode=arch=compute_52,code=sm_52
+                -gencode=arch=compute_60,code=sm_60
+                -gencode=arch=compute_61,code=sm_61
+                -gencode=arch=compute_61,code=compute_61
+                >)
+        else()
+            message(FATAL_ERROR "TomoPy requires CUDA >= 8.0, current version: ${CUDA_VERSION}")
+        endif()
+
+        list(APPEND EXTERNAL_LIBRARIES tomopy-cuda)
+        target_compile_definitions(tomopy-cuda INTERFACE TOMOPY_USE_CUDA)
 
         if(TOMOPY_USE_NVTX)
             find_library(NVTX_LIBRARY
                 NAMES nvToolsExt
-                PATHS /usr/local/cuda
-                HINTS /usr/local/cuda
+                PATHS ${CUDA_TOOLKIT_ROOT_DIR} ${CUDA_SDK_ROOT_DIR} /usr/local/cuda
+                HINTS ${CUDA_TOOLKIT_ROOT_DIR} ${CUDA_SDK_ROOT_DIR} /usr/local/cuda
                 PATH_SUFFIXES lib lib64)
-        else()
-            unset(NVTX_LIBRARY CACHE)
-        endif()
-
-        if(NVTX_LIBRARY)
-            list(APPEND EXTERNAL_LIBRARIES ${NVTX_LIBRARY})
-            list(APPEND ${PROJECT_NAME}_DEFINITIONS TOMOPY_USE_NVTX)
-        else()
-            if(TOMOPY_USE_NVTX)
+            if(NVTX_LIBRARY)
+                list(APPEND EXTERNAL_LIBRARIES ${NVTX_LIBRARY})
+                list(APPEND ${PROJECT_NAME}_DEFINITIONS TOMOPY_USE_NVTX)
+            else()
                 set(TOMOPY_USE_NVTX OFF)
             endif()
         endif()
 
         list(APPEND ${PROJECT_NAME}_CUDA_FLAGS
-            -arch=sm_${CUDA_ARCH}
-            --default-stream per-thread)
+            --default-stream per-thread
+            --expt-extended-lambda)
 
         if(NOT WIN32)
             list(APPEND ${PROJECT_NAME}_CUDA_FLAGS
@@ -221,24 +312,18 @@ if(TOMOPY_USE_CUDA)
         if(TOMOPY_CUDA_LINEINFO)
             list(APPEND ${PROJECT_NAME}_CUDA_FLAGS -lineinfo)
         endif()
-        add_option(TOMOPY_USE_CUDA_MAX_REGISTER_COUNT "Enable setting maximum register count" OFF)
+
         if(TOMOPY_USE_CUDA_MAX_REGISTER_COUNT)
-            add_feature(CUDA_MAX_REGISTER_COUNT "CUDA maximum register count")
             set(CUDA_MAX_REGISTER_COUNT "24" CACHE STRING "CUDA maximum register count")
-            list(APPEND ${PROJECT_NAME}_CUDA_FLAGS
-            --maxrregcount=${CUDA_MAX_REGISTER_COUNT})
+            list(APPEND ${PROJECT_NAME}_CUDA_FLAGS --maxrregcount=${CUDA_MAX_REGISTER_COUNT})
         endif()
 
     endif()
 
-    find_package(CUDA REQUIRED)
-    if(CUDA_FOUND)
-        list(APPEND EXTERNAL_LIBRARIES ${CUDA_npp_LIBRARY})
-        list(APPEND EXTERNAL_INCLUDE_DIRS ${CUDA_INCLUDE_DIRS}
-            ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
-    else()
-        set(TOMOPY_USE_CUDA OFF)
-    endif()
+    find_package(CUDA REQUIRED QUIET)
+    list(APPEND EXTERNAL_LIBRARIES ${CUDA_npp_LIBRARY})
+    list(APPEND EXTERNAL_INCLUDE_DIRS ${CUDA_INCLUDE_DIRS}
+        ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
 endif()
 
 

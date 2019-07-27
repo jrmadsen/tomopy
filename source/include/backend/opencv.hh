@@ -40,6 +40,8 @@
 
 #pragma once
 
+#include "backend/device.hh"
+#include "backend/ranges.hh"
 #include "environment.hh"
 #include "macros.hh"
 
@@ -50,21 +52,30 @@
 
 //--------------------------------------------------------------------------------------//
 
-#define DEFINE_OPENCV_DATA_TYPE(pod_type, opencv_type)                                   \
-    template <>                                                                          \
-    struct data_type<pod_type>                                                           \
-    {                                                                                    \
-        template <typename _Up = pod_type>                                               \
-        static constexpr int value()                                                     \
-        {                                                                                \
-            return opencv_type;                                                          \
-        }                                                                                \
-    };
-
-//--------------------------------------------------------------------------------------//
-
 namespace opencv
 {
+//--------------------------------------------------------------------------------------//
+//
+// define some types for when CUDA is enabled
+using stream_t      = int;
+using event_t       = int;
+using error_t       = int;
+using memcpy_t      = int;
+using device_prop_t = int;
+// define some values for when CUDA is enabled
+static const int success_v          = 0;
+static const int err_not_ready_v    = 1;
+static const int host_to_host_v     = 0;
+static const int host_to_device_v   = 1;
+static const int device_to_host_v   = 2;
+static const int device_to_device_v = 3;
+
+template <bool B, typename T = char>
+using enable_if_t = impl::enable_if_t<B, T>;
+
+template <typename _Tp>
+using array_t = std::vector<_Tp>;
+
 struct interpolation
 {
     static int nn() { return CV_INTER_NN; }
@@ -83,93 +94,168 @@ struct interpolation
 
 //--------------------------------------------------------------------------------------//
 
-template <typename _Tp>
-struct data_type
+struct kernel_params
 {
-    template <typename _Up = _Tp>
-    static constexpr int value()
+    kernel_params() = default;
+
+    explicit kernel_params(uint32_t _block, uint32_t _grid = 0)
+    : block(_block)
+    , grid(_grid)
+    {}
+
+    int compute(const int& size)
     {
-        static_assert(std::is_same<_Up, _Tp>::value, "OpenCV data type not overloaded");
-        return -1;
+        return (grid == 0) ? ((size + block - 1) / block) : grid;
     }
+
+    static int compute(const int& size, const int& block_size)
+    {
+        return ((size + block_size - 1) / block_size);
+    }
+
+    uint32_t block = get_env<uint32_t>("TOMOPY_BLOCK_SIZE", 32);
+    uint32_t grid  = get_env<uint32_t>("TOMOPY_GRID_SIZE", 0);  // 0 == compute
 };
 
 //--------------------------------------------------------------------------------------//
 
-// floating point types
-DEFINE_OPENCV_DATA_TYPE(float, CV_32F)
-DEFINE_OPENCV_DATA_TYPE(double, CV_64F)
-// signed integer type
-DEFINE_OPENCV_DATA_TYPE(int8_t, CV_8S)
-DEFINE_OPENCV_DATA_TYPE(int16_t, CV_16S)
-DEFINE_OPENCV_DATA_TYPE(int32_t, CV_32S)
-// unsigned integer types
-DEFINE_OPENCV_DATA_TYPE(uint8_t, CV_8U)
-DEFINE_OPENCV_DATA_TYPE(uint16_t, CV_16U)
+inline uint32_t&
+this_thread_device()
+{
+    // this creates a globally accessible function for determining the device
+    // the thread is assigned to
+    //
+    static uint32_t _instance = 0;
+    return _instance;
+}
 
 //--------------------------------------------------------------------------------------//
+//
+//      functions dealing with cuda errors
+//
+//--------------------------------------------------------------------------------------//
 
-inline cv::Mat
-affine_transform(const cv::Mat& warp_src, double theta, const int& nx, const int& ny,
-                 int eInterp, double scale = 1.0)
+/// check the success of a cudaError_t
+inline bool
+check_call(error_t err)
 {
-    cv::Mat   warp_dst = cv::Mat::zeros(nx, ny, warp_src.type());
-    double    cx       = 0.5 * ny + ((ny % 2 == 0) ? 0.5 : 0.0);
-    double    cy       = 0.5 * nx + ((nx % 2 == 0) ? 0.5 : 0.0);
-    cv::Point center   = cv::Point(cx, cy);
-    cv::Mat   rot      = cv::getRotationMatrix2D(center, theta, scale);
-    cv::warpAffine(warp_src, warp_dst, rot, warp_src.size(), eInterp);
-    return warp_dst;
+    return (err == success_v);
+}
+
+//--------------------------------------------------------------------------------------//
+/// get last error but don't reset last error to cudaSuccess
+inline error_t
+peek_at_last_error()
+{
+    return 0;
+}
+
+//--------------------------------------------------------------------------------------//
+/// get last error and reset to cudaSuccess
+inline error_t
+get_last_error()
+{
+    return 0;
+}
+
+//--------------------------------------------------------------------------------------//
+/// get the error string
+inline const char*
+get_error_string(error_t err)
+{
+    return "";
+}
+
+//--------------------------------------------------------------------------------------//
+//
+//      functions dealing with the device
+//
+//--------------------------------------------------------------------------------------//
+
+/// get the number of devices available
+inline int
+device_count()
+{
+    return 1;
 }
 
 //--------------------------------------------------------------------------------------//
 
+inline device_prop_t
+device_properties(int = 0)
+{
+    return device_prop_t(0);
+}
+
+/// print info about devices available (only does this once per process)
+inline void
+device_query()
+{}
+
+//--------------------------------------------------------------------------------------//
+/// get the number of devices available
+inline int
+device_sm_count(int)
+{
+    return 0;
+}
+
+//--------------------------------------------------------------------------------------//
+/// sets the thread to a specific device
+inline void
+set_device(int)
+{}
+
+//--------------------------------------------------------------------------------------//
+/// sync the device
+inline void
+device_sync()
+{}
+
+//--------------------------------------------------------------------------------------//
+/// reset the device
+inline void
+device_reset()
+{}
+
+//--------------------------------------------------------------------------------------//
+//
+//      functions dealing with CPU allocations
+//
+//--------------------------------------------------------------------------------------//
+
+/// cpu malloc
 template <typename _Tp>
-void
-rotate(array_t<_Tp>& dst, const _Tp* src, double theta, const int& nx, const int& ny,
-       int eInterp, double scale = 1.0)
+inline _Tp*
+malloc(size_t n)
 {
-    cv::Mat warp_src = cv::Mat::zeros(nx, ny, data_type<_Tp>::value());
-    memcpy(warp_src.ptr(), src, nx * ny * sizeof(float));
-    cv::Mat warp_rot =
-        affine_transform(warp_src, theta * degrees, nx, ny, eInterp, scale);
-    memcpy(dst.data(), warp_rot.ptr(), nx * ny * sizeof(float));
+    return new _Tp[n];
 }
 
-//--------------------------------------------------------------------------------------//
-
-inline array_t<int32_t>
-compute_sum_dist(int dy, int dt, int dx, int nx, int ny, const float* theta)
+/// cpu malloc
+template <typename _Tp>
+inline void
+free(_Tp*& arr)
 {
-    auto compute = [&](const array_t<int32_t>& ones, array_t<int32_t>& sum_dist, int p) {
-        for(int s = 0; s < dy; ++s)
-        {
-            for(int d = 0; d < dx; ++d)
-            {
-                int32_t*       _sum_dist = sum_dist.data() + (s * nx * ny) + (d * nx);
-                const int32_t* _ones     = ones.data() + (d * nx);
-                for(int n = 0; n < nx; ++n)
-                {
-                    _sum_dist[n] += (_ones[n] > 0) ? 1 : 0;
-                }
-            }
-        }
-    };
+    delete[] arr;
+    arr = nullptr;
+}
 
-    array_t<int32_t> rot(nx * ny, 0);
-    array_t<int32_t> tmp(nx * ny, 1);
-    array_t<int32_t> sum_dist(dy * nx * ny, 0);
+/// cpu memcpy
+template <typename _Tp>
+inline void
+memcpy(_Tp* dst, const _Tp* src, size_t n, memcpy_t = 0, stream_t = 0)
+{
+    if(src != dst)
+        std::memcpy(dst, src, n * sizeof(_Tp));
+}
 
-    for(int p = 0; p < dt; ++p)
-    {
-        float theta_p_rad = fmodf(theta[p], twopi);
-        rotate(rot, tmp.data(), -theta_p_rad, nx, ny, interpolation::nn());
-        compute(rot, sum_dist, p);
-    }
-
-    return sum_dist;
+/// cpu memset
+template <typename _Tp>
+inline void
+memset(_Tp* dst, const int& value, size_t n, stream_t = 0)
+{
+    std::memset(dst, value, n * sizeof(_Tp));
 }
 
 }  // namespace opencv
-
-#undef DEFINE_OPENCV_DATA_TYPE  // don't pollute

@@ -40,6 +40,30 @@ ENDMACRO()
 
 
 #-----------------------------------------------------------------------
+# CACHED LIST
+#-----------------------------------------------------------------------
+# macro cache_list(<LIST_OPERATION> <LIST> <ARGS...>)
+#
+#   provide list semantics in a internal cache variable
+#
+FUNCTION(CACHE_LIST _OP _LIST)
+    # apply operation on list
+    list(${_OP} ${_LIST} ${ARGN})
+    # replace list
+    set(${_LIST} ${${_LIST}} CACHE INTERNAL "Cached list ${_LIST}")
+ENDFUNCTION()
+
+
+#----------------------------------------------------------------------------------------#
+# macro to add an interface lib
+#
+MACRO(ADD_INTERFACE_LIBRARY _TARGET)
+    add_library(${_TARGET} INTERFACE ${ARGN})
+    cache_list(APPEND ${PROJECT_NAME_UC}_INTERFACE_LIBRARIES ${_TARGET})
+ENDMACRO()
+
+
+#-----------------------------------------------------------------------
 # function - capitalize - make a string capitalized (first letter is capital)
 #   usage:
 #       capitalize("SHARED" CShared)

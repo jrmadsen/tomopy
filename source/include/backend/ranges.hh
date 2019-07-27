@@ -41,6 +41,8 @@
 #pragma once
 
 #include "backend/device.hh"
+
+#include <cstdint>
 #include <type_traits>
 
 namespace impl
@@ -84,7 +86,7 @@ protected:
 //
 //======================================================================================//
 
-template <typename _Device, size_t DIM = 0, typename _Intp = int32_t>
+template <typename _Device, uint32_t DIM = 0, typename _Intp = int32_t>
 struct grid_strided_range : impl::range<_Intp>
 {
     using base_type = impl::range<_Intp>;

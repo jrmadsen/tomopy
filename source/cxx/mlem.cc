@@ -37,23 +37,31 @@
 //  ---------------------------------------------------------------
 //   TOMOPY implementation
 
+#include "backend/opencv.hh"
+#include "backend/opencv_algorithms.hh"
+#include "backend/ranges.hh"
 #include "common.hh"
 #include "data.hh"
 #include "options.hh"
 #include "utils.hh"
 
+#include <algorithm>
+#include <cassert>
+#include <chrono>
 #include <cstdlib>
+#include <memory>
+#include <numeric>
 
 //======================================================================================//
 
 // directly call the CPU version
-/*DLL void
+void
 mlem_cpu(const float* data, int dy, int dt, int dx, const float* center,
          const float* theta, float* recon, int ngridx, int ngridy, int num_iter,
          RuntimeOptions*);
-*/
+
 // directly call the GPU version
-DLL void
+void
 mlem_cuda(const float* data, int dy, int dt, int dx, const float* center,
           const float* theta, float* recon, int ngridx, int ngridy, int num_iter,
           RuntimeOptions*);
@@ -79,7 +87,7 @@ cxx_mlem(const float* data, int dy, int dt, int dx, const float* center,
 
     // create the thread-pool
     opts.init();
-    std::cout << "Options: " << opts << std::endl;
+    std::cout << "Options:\n" << opts << std::endl;
 
     START_TIMER(cxx_timer);
     TIMEMORY_AUTO_TIMER("");
@@ -96,8 +104,8 @@ cxx_mlem(const float* data, int dy, int dt, int dx, const float* center,
         }
         else
         {
-            // mlem_cpu(data, dy, dt, dx, center, theta, recon, ngridx, ngridy, num_iter,
-            //         &opts);
+            mlem_cpu(data, dy, dt, dx, center, theta, recon, ngridx, ngridy, num_iter,
+                     &opts);
         }
     }
     catch(std::exception& e)
@@ -115,119 +123,169 @@ cxx_mlem(const float* data, int dy, int dt, int dx, const float* center,
 }
 
 //======================================================================================//
-/*
-void
-mlem_cpu_compute_projection(data_array_t& cpu_data, int p, int dy, int dt, int dx, int nx,
-                            int ny, const float* theta)
+
+namespace
 {
-    ConsumeParameters(dy);
-    auto cache = cpu_data[this_thread_id() % cpu_data.size()];
+void
+pixels_kernel(int p, int dx, int nx, int ny, float* recon, const float* data, float* sum)
+{
+    // dt == number of angles
+    // dy == number of slices
+    // dx == number of pixels
+    // nx == ngridx
+    // ny == ngridy
+    // compute simdata
 
-    // calculate some values
-    float    theta_p = fmodf(theta[p], twopi);
-    farray_t tmp_update(dy * nx * ny, 0.0);
+#define MANUAL_UNROLL
 
-    for(int s = 0; s < dy; ++s)
+#if defined(MANUAL_UNROLL)
+    constexpr size_t unroll_length = 32;
+    size_t           dx_end_unroll = dx / unroll_length;
+    size_t           dx_end_modulo = dx % unroll_length;
+#else
+    auto dx_range = grid_strided_range<device::cpu, 1>(dx);
+#endif
+
+    auto nx_range = grid_strided_range<device::cpu, 0>(nx);
+
+    for(int i = nx_range.begin(); i < nx_range.end(); i += nx_range.stride())
     {
-        const float* data  = cache->data() + s * dt * dx;
-        const float* recon = cache->recon() + s * nx * ny;
-        auto&        rot   = cache->rot();
-        auto&        tmp   = cache->tmp();
+        auto* _recon = recon + i * nx;
+#if defined(MANUAL_UNROLL)
+        auto func = [&](size_t offset, size_t d) {
+            sum[d + offset] += _recon[d + offset];
+        };
 
-        // reset intermediate data
-        cache->reset();
+        for(size_t d = 0; d < dx_end_unroll; ++d)
+            impl::apply::loop_unroll<unroll_length>(func, d * unroll_length);
 
-        // forward-rotate
-        cxx_rotate_ip<float>(rot, recon, -theta_p, nx, ny, cache->interpolation());
-
-        // compute simdata
-        for(int d = 0; d < dx; ++d)
-        {
-            float sum = 0.0f;
-            for(int i = 0; i < nx; ++i)
-                sum += rot[d * nx + i];
-            if(sum != 0.0f)
-            {
-                float upd = data[p * dx + d] / sum;
-                if(std::isfinite(upd))
-                {
-                    for(int i = 0; i < nx; ++i)
-                        rot[d * nx + i] += upd;
-                }
-            }
-        }
-
-        // back-rotate object
-        cxx_rotate_ip<float>(tmp, rot.data(), theta_p, nx, ny, cache->interpolation());
-
-        // update local update array
-        for(uintmax_t i = 0; i < static_cast<uintmax_t>(nx * ny); ++i)
-            tmp_update[(s * nx * ny) + i] += tmp[i];
+        for(size_t d = dx_end_unroll; d < dx_end_unroll + dx_end_modulo; ++d)
+            func(0, d);
+#else
+        for(int d = dx_range.begin(); d < dx_range.end(); d += dx_range.stride())
+            sum[d] += recon[i * nx + d];
+#endif
     }
 
-    cache->upd_mutex()->lock();
-    for(int s = 0; s < dy; ++s)
+    for(int i = nx_range.begin(); i < nx_range.end(); i += nx_range.stride())
     {
-        // update shared update array
-        float* update = cache->update() + s * nx * ny;
-        float* tmp    = tmp_update.data() + s * nx * ny;
-        for(uintmax_t i = 0; i < static_cast<uintmax_t>(nx * ny); ++i)
-            update[i] += tmp[i];
+        auto* _recon = recon + i * nx;
+        auto* _data  = data + p * dx;
+#if defined(MANUAL_UNROLL)
+        auto func = [&](size_t offset, size_t d) {
+            _recon[d + offset] += _data[d + offset] / sum[d + offset];
+        };
+
+        for(size_t d = 0; d < dx_end_unroll; ++d)
+            impl::apply::loop_unroll<unroll_length>(func, d * unroll_length);
+
+        for(size_t d = dx_end_unroll; d < dx_end_unroll + dx_end_modulo; ++d)
+            func(0, d);
+#else
+        for(int d = dx_range.begin(); d < dx_range.end(); d += dx_range.stride())
+            _recon[d] += _data[d] / sum[d];
+#endif
     }
-    cache->upd_mutex()->unlock();
 }
 
 //======================================================================================//
 
 void
-mlem_cpu(const float* data, int dy, int dt, int dx, const float*, const float* theta,
-         float* recon, int ngridx, int ngridy, int num_iter, RuntimeOptions* opts)
+update_kernel(float* recon, const float* update, const int32_t* sum_dist, int dx,
+              int size)
 {
+    if(dx == 0)
+        return;
+    auto  range = grid_strided_range<device::cpu, 0>(size);
+    float fdx   = static_cast<float>(dx);
+    for(int i = range.begin(); i < range.end(); i += range.stride())
+    {
+        auto  sum = sum_dist[i];
+        float upd = update[i];
+        if(sum != 0)
+            recon[i] *= upd / static_cast<float>(sum) / fdx;
+    }
+}
+
+}  // namespace
+
+//======================================================================================//
+
+void
+mlem_cpu(const float* data, int dy, int dt, int dx, const float* center,
+         const float* theta, float* recon, int nx, int ny, int num_iter,
+         RuntimeOptions* opts)
+{
+    cv::setNumThreads(4);
     printf("[%lu]> %s : nitr = %i, dy = %i, dt = %i, dx = %i, nx = %i, ny = %i\n",
-           this_thread_id(), __FUNCTION__, num_iter, dy, dt, dx, ngridx, ngridy);
+           this_thread_id(), __FUNCTION__, num_iter, dy, dt, dx, nx, ny);
 
     TIMEMORY_AUTO_TIMER("");
 
-    uintmax_t   recon_pixels = static_cast<uintmax_t>(dy * ngridx * ngridy);
-    farray_t    update(recon_pixels, 0.0f);
-    init_data_t init_data =
-        CpuData::initialize(opts, dy, dt, dx, ngridx, ngridy, recon, data, update.data());
-    data_array_t cpu_data = std::get<0>(init_data);
-    iarray_t     sum_dist = cxx_compute_sum_dist(dy, dt, dx, ngridx, ngridy, theta);
+    auto      interp       = opts->interpolation;
+    uintmax_t recon_pixels = static_cast<uintmax_t>(dy * nx * ny);
+    float*    update       = opencv::malloc<float>(recon_pixels);
+    float*    plus_rot     = opencv::malloc<float>(recon_pixels);
+    float*    back_rot     = opencv::malloc<float>(recon_pixels);
+    float*    sum_rot      = opencv::malloc<float>(dx);
+    int32_t*  sum_dist = opencv::compute_sum_dist(dy, dt, dx, nx, ny, theta, center[0]);
 
-    //----------------------------------------------------------------------------------//
+    auto get_slice = [&](float* arr, const int& s) { return arr + s * nx * ny; };
+
+    for(uintmax_t i = 0; i < recon_pixels; ++i)
+        recon[i] += 2 * std::numeric_limits<float>::epsilon();
+
     for(int i = 0; i < num_iter; i++)
     {
+        // timing and profiling
+        TIMEMORY_AUTO_TIMER("");
         START_TIMER(t_start);
-        TIMEMORY_AUTO_TIMER();
 
-        // reset global update
-        memset(update.data(), 0, recon_pixels * sizeof(float));
+        // reset global update and sum_dist
+        opencv::memset(update, 0, recon_pixels);
 
-        // sync and reset
-        CpuData::reset(cpu_data);
-
-        // execute the loop over projection angles
-        execute<data_array_t>(opts, dt, std::ref(cpu_data), mlem_cpu_compute_projection,
-                              dy, dt, dx, ngridx, ngridy, theta);
-
-        // update the global recon with global update and sum_dist
-        for(uintmax_t ii = 0; ii < recon_pixels; ++ii)
+        // loop over independent projection angles
+        for(int p = 0; p < dt; ++p)
         {
-            if(sum_dist[ii] != 0.0f && dx != 0 && update[ii] == update[ii])
-                recon[ii] *= update[ii] / sum_dist[ii] / static_cast<float>(dx);
-            else if(!std::isfinite(update[ii]))
+            float theta_p = fmodf(theta[p], twopi);
+            // loop over independent slices
+            for(int s = 0; s < dy; ++s)
             {
-                std::cout << "update[" << ii << "] is not finite : " << update[ii]
-                          << std::endl;
+                opencv::memset(plus_rot, 0, recon_pixels);
+                opencv::memset(back_rot, 0, recon_pixels);
+                opencv::memset(sum_rot, 0, dx);
+
+                auto* s_recon    = get_slice(recon, s);
+                auto* s_update   = get_slice(update, s);
+                auto* s_data     = data + s * dt * dx;
+                auto* s_plus_rot = get_slice(plus_rot, s);
+                auto* s_back_rot = get_slice(back_rot, s);
+
+                opencv::rotate(s_plus_rot, s_recon, -theta_p, center[s], nx, ny, interp);
+                pixels_kernel(p, dx, nx, ny, s_plus_rot, s_data, sum_rot);
+                opencv::rotate(s_back_rot, s_plus_rot, theta_p, center[s], nx, ny,
+                               interp);
+                opencv::atomic_sum(s_update, s_back_rot, nx * ny);
             }
         }
+
+        // update the global recon with global update and sum_dist
+        update_kernel(recon, update, sum_dist, dx, recon_pixels);
+
+        // stop profile range and report timing
         REPORT_TIMER(t_start, "iteration", i, num_iter);
     }
 
-    printf("\n");
+    // cleanup
+    opencv::free(update);
+    opencv::free(sum_dist);
+    opencv::free(plus_rot);
+    opencv::free(back_rot);
+
+    // sync the device
+    opencv::device_sync();
 }
-*/
+
 //======================================================================================//
 #if !defined(TOMOPY_USE_CUDA)
 void
@@ -235,7 +293,7 @@ mlem_cuda(const float* data, int dy, int dt, int dx, const float* center,
           const float* theta, float* recon, int ngridx, int ngridy, int num_iter,
           RuntimeOptions* opts)
 {
-    // mlem_cpu(data, dy, dt, dx, center, theta, recon, ngridx, ngridy, num_iter, opts);
+    mlem_cpu(data, dy, dt, dx, center, theta, recon, ngridx, ngridy, num_iter, opts);
 }
 #endif
 //======================================================================================//

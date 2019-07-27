@@ -56,6 +56,12 @@ END_EXTERN_C
 #include <algorithm>
 #include <deque>
 
+#if defined(__NVCC__)
+#    define TOMOPY_LAMBDA __host__ __device__
+#else
+#    define TOMOPY_LAMBDA
+#endif
+
 //======================================================================================//
 // function for printing an array
 //
@@ -129,6 +135,24 @@ struct apply_impl
             std::forward<_TupleA>(_tupA), std::forward<_TupleB>(_tupB),
             std::forward<_Args>(_args)...);
     }
+
+    //----------------------------------------------------------------------------------//
+    // unroll loop
+    template <size_t _N, size_t _Nt, typename _Func, typename... _Args,
+              typename std::enable_if<(_N == 1), char>::type = 0>
+    TOMOPY_LAMBDA static void loop_unroll(_Func&& __func, _Args&&... __args)
+    {
+        std::forward<_Func>(__func)(_Nt - _N, std::forward<_Args>(__args)...);
+    }
+
+    template <size_t _N, size_t _Nt, typename _Func, typename... _Args,
+              typename std::enable_if<(_N > 1), char>::type = 0>
+    TOMOPY_LAMBDA static void loop_unroll(_Func&& __func, _Args&&... __args)
+    {
+        std::forward<_Func>(__func)(_Nt - _N, std::forward<_Args>(__args)...);
+        loop_unroll<_N - 1, _Nt, _Func, _Args...>(std::forward<_Func>(__func),
+                                                  std::forward<_Args>(__args)...);
+    }
 };
 
 //======================================================================================//
@@ -146,6 +170,15 @@ struct apply
         apply_impl::template unroll<0, _N - 1, _Operator, _TupleA, _TupleB, _Args...>(
             std::forward<_TupleA>(_tupA), std::forward<_TupleB>(_tupB),
             std::forward<_Args>(_args)...);
+    }
+
+    //----------------------------------------------------------------------------------//
+
+    template <size_t _N, typename _Func, typename... _Args>
+    TOMOPY_LAMBDA static void loop_unroll(_Func&& __func, _Args&&... __args)
+    {
+        apply_impl::template loop_unroll<_N, _N, _Func, _Args...>(
+            std::forward<_Func>(__func), std::forward<_Args>(__args)...);
     }
 };
 

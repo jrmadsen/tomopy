@@ -136,10 +136,11 @@ namespace cuda
 //--------------------------------------------------------------------------------------//
 //
 // define some types for when CUDA is enabled
-using stream_t = cudaStream_t;
-using event_t  = cudaEvent_t;
-using error_t  = cudaError_t;
-using memcpy_t = cudaMemcpyKind;
+using stream_t      = cudaStream_t;
+using event_t       = cudaEvent_t;
+using error_t       = cudaError_t;
+using memcpy_t      = cudaMemcpyKind;
+using device_prop_t = cudaDeviceProp;
 // define some values for when CUDA is enabled
 static const decltype(cudaSuccess)       success_v          = cudaSuccess;
 static const decltype(cudaErrorNotReady) err_not_ready_v    = cudaErrorNotReady;
@@ -170,11 +171,10 @@ struct interpolation
 
     static int mode(const std::string& preferred)
     {
-        EnvChoiceList<int> choices = {
-            EnvChoice<int>(nn(), "NN", "nearest neighbor interpolation"),
-            EnvChoice<int>(linear(), "LINEAR", "bilinear interpolation"),
-            EnvChoice<int>(cubic(), "CUBIC", "bicubic interpolation")
-        };
+        EnvChoiceList<int> choices =
+            { EnvChoice<int>(nn(), "NN", "nearest neighbor interpolation"),
+              EnvChoice<int>(linear(), "LINEAR", "bilinear interpolation"),
+              EnvChoice<int>(cubic(), "CUBIC", "bicubic interpolation") };
         return GetChoice<int>(choices, preferred);
     }
 };
@@ -273,10 +273,10 @@ device_count()
 
 //--------------------------------------------------------------------------------------//
 
-inline cudaDeviceProp
+inline device_prop_t
 device_properties(int device = 0)
 {
-    using map_t                             = std::map<int, cudaDeviceProp>;
+    using map_t                             = std::map<int, device_prop_t>;
     using pointer_t                         = std::unique_ptr<map_t>;
     static thread_local pointer_t _instance = pointer_t(new map_t());
 
@@ -284,7 +284,7 @@ device_properties(int device = 0)
         return _instance->find(device)->second;
 
     cudaSetDevice(device);
-    cudaDeviceProp deviceProp;
+    device_prop_t deviceProp;
     cudaGetDeviceProperties(&deviceProp, device);
     return ((*_instance)[device] = deviceProp);
 }
