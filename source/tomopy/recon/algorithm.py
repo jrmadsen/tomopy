@@ -424,5 +424,5 @@ def _get_algorithm_kwargs(shape):
         'interpolation': 'NN', # interpolation method (NN = nearest-neighbor, LINEAR, CUBIC)
         'device': 'gpu',
         'grid_size': np.array([0, 0, 0], dtype='int32'), # CUDA grid size. If zero, dynamically computed
-        'block_size': np.array([32, 32, 1], dtype='int32'), # CUDA threads per block
+        'block_size': np.array([32, 1, 1], dtype='int32'), # CUDA threads per block
     }

@@ -95,26 +95,11 @@ cxx_mlem(const float* data, int dy, int dt, int dx, const float* center,
     printf("[%lu]> %s : nitr = %i, dy = %i, dt = %i, dx = %i, nx = %i, ny = %i\n", tid,
            __FUNCTION__, num_iter, dy, dt, dx, ngridx, ngridy);
 
-    try
-    {
-        if(opts.device.key == "gpu")
-        {
-            mlem_cuda(data, dy, dt, dx, center, theta, recon, ngridx, ngridy, num_iter,
-                      &opts);
-        }
-        else
-        {
-            mlem_cpu(data, dy, dt, dx, center, theta, recon, ngridx, ngridy, num_iter,
-                     &opts);
-        }
-    }
-    catch(std::exception& e)
-    {
-        AutoLock l(TypeMutex<decltype(std::cout)>());
-        std::cerr << "[TID: " << tid << "] " << e.what()
-                  << "\nFalling back to CPU algorithm..." << std::endl;
-        return EXIT_FAILURE;
-    }
+    if(opts.device.key == "gpu")
+        mlem_cuda(data, dy, dt, dx, center, theta, recon, ngridx, ngridy, num_iter,
+                  &opts);
+    else
+        mlem_cpu(data, dy, dt, dx, center, theta, recon, ngridx, ngridy, num_iter, &opts);
 
     registration.cleanup(&opts);
     REPORT_TIMER(cxx_timer, __FUNCTION__, count, tcount);

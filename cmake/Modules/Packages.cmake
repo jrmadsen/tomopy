@@ -329,6 +329,7 @@ if(TOMOPY_USE_CUDA)
 
         if(TOMOPY_CUDA_LINEINFO)
             list(APPEND ${PROJECT_NAME}_CUDA_FLAGS -lineinfo)
+            list(APPEND ${PROJECT_NAME}_CXX_FLAGS -fno-omit-frame-pointer -funwind-tables -g)
         endif()
 
         if(TOMOPY_USE_CUDA_MAX_REGISTER_COUNT)

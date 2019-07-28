@@ -15,11 +15,9 @@ set(CMAKE_INSTALL_LIBDIR ${PYTHON_SITE_DIR}/tomopy/sharedlibs
 #------------------------------------------------------------------------------#
 
 # Locate sources and headers for this project headers are included for IDEs
-file(GLOB tomo_headers
+file(GLOB_RECURSE tomo_headers
     ${CMAKE_CURRENT_LIST_DIR}/include/*.h
     ${CMAKE_CURRENT_LIST_DIR}/include/*.hh
-    ${CMAKE_CURRENT_LIST_DIR}/include/backend/*.hh
-    ${CMAKE_CURRENT_LIST_DIR}/include/*.hpp
     ${CMAKE_CURRENT_LIST_DIR}/include/*.icc)
 file(GLOB tomo_sources
     ${CMAKE_CURRENT_LIST_DIR}/c/*.c
@@ -72,10 +70,16 @@ set_target_properties(libtomopy
 target_compile_definitions(libtomopy PUBLIC
     ${${PROJECT_NAME}_DEFINITIONS})
 
-target_compile_options(libtomopy PUBLIC
-    $<$<COMPILE_LANGUAGE:C>:${${PROJECT_NAME}_C_FLAGS}>
-    $<$<COMPILE_LANGUAGE:CXX>:${${PROJECT_NAME}_CXX_FLAGS}>
-    $<$<COMPILE_LANGUAGE:CUDA>:${${PROJECT_NAME}_CUDA_FLAGS}>)
+if(CMAKE_CUDA_COMPILER)
+    target_compile_options(libtomopy PUBLIC
+        $<$<COMPILE_LANGUAGE:C>:${${PROJECT_NAME}_C_FLAGS}>
+        $<$<COMPILE_LANGUAGE:CXX>:${${PROJECT_NAME}_CXX_FLAGS}>
+        $<$<COMPILE_LANGUAGE:CUDA>:${${PROJECT_NAME}_CUDA_FLAGS}>)
+else()
+    target_compile_options(libtomopy PUBLIC
+        $<$<COMPILE_LANGUAGE:C>:${${PROJECT_NAME}_C_FLAGS}>
+        $<$<COMPILE_LANGUAGE:CXX>:${${PROJECT_NAME}_CXX_FLAGS}>)
+endif()
 
 # Install the compiled library
 install(TARGETS libtomopy

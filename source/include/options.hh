@@ -329,7 +329,7 @@ struct RuntimeOptions
     {
         if(pool_size == 0)
         {
-            pool_size = 32;
+            pool_size = std::min<num_threads_t>(2 * HW_CONCURRENCY, 24);
         }
     }
 

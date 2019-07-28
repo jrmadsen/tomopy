@@ -95,11 +95,11 @@ extern nvtxEventAttributes_t nvtx_rotate;
 #if !defined(CUDA_CHECK_CALL)
 #    define CUDA_CHECK_CALL(err)                                                         \
         {                                                                                \
-            if(cudaSuccess != err)                                                       \
+            if(err != cuda::success_v)                                                   \
             {                                                                            \
                 std::stringstream ss;                                                    \
                 ss << "cudaCheckError() failed at " << __FUNCTION__ << "@'" << __FILE__  \
-                   << "':" << __LINE__ << " : " << cudaGetErrorString(err);              \
+                   << "':" << __LINE__ << " : " << cuda::get_error_string(err);          \
                 fprintf(stderr, "%s\n", ss.str().c_str());                               \
                 throw std::runtime_error(ss.str().c_str());                              \
             }                                                                            \
@@ -111,17 +111,9 @@ extern nvtxEventAttributes_t nvtx_rotate;
 #    if !defined(CUDA_CHECK_LAST_ERROR)
 #        define CUDA_CHECK_LAST_ERROR(stream)                                            \
             {                                                                            \
-                cudaStreamSynchronize(stream);                                           \
-                cudaError err = cudaGetLastError();                                      \
-                if(cudaSuccess != err)                                                   \
-                {                                                                        \
-                    std::stringstream ss;                                                \
-                    ss << "cudaCheckError() failed at " << __FUNCTION__ << "@'"          \
-                       << __FILE__ << "':" << __LINE__ << " : "                          \
-                       << cudaGetErrorString(err);                                       \
-                    fprintf(stderr, "%s\n", ss.str().c_str());                           \
-                    throw std::runtime_error(ss.str().c_str());                          \
-                }                                                                        \
+                cuda::stream_sync(stream);                                               \
+                cuda::error_t err = cuda::get_last_error();                              \
+                CUDA_CHECK_CALL(err);                                                    \
             }
 #    endif
 #else
@@ -140,6 +132,7 @@ using event_t       = cudaEvent_t;
 using error_t       = cudaError_t;
 using memcpy_t      = cudaMemcpyKind;
 using device_prop_t = cudaDeviceProp;
+
 // define some values for when CUDA is enabled
 static const decltype(cudaSuccess)       success_v          = cudaSuccess;
 static const decltype(cudaErrorNotReady) err_not_ready_v    = cudaErrorNotReady;
@@ -153,7 +146,14 @@ inline int
 device_count();
 
 inline int
-device_sm_count(int device = 0);
+device_sm_count(int = 0);
+
+inline const char* get_error_string(error_t);
+
+inline error_t
+get_last_error();
+
+inline void stream_sync(stream_t);
 
 //--------------------------------------------------------------------------------------//
 //
@@ -204,11 +204,15 @@ struct kernel_params
 #if defined(__NVCC__)
 template <typename _Func, typename... _Args>
 void
-launch(const kernel_params& params, int32_t size, stream_t stream, _Func&& f,
+launch(const kernel_params& params, int32_t size, stream_t stream, _Func& func,
        _Args&&... args)
 {
-    f<<<params.block, params.compute(size, params.block), 0, stream>>>(
-        std::forward<_Args>(args)...);
+    auto block = params.block;
+    auto ngrid = params.compute(size, block);
+    // printf("launching kernel for data of size %i with <<<%i, %i>>>\n", size, ngrid,
+    //       block);
+    func<<<ngrid, block, 0, stream>>>(std::forward<_Args>(args)...);
+    CUDA_CHECK_LAST_ERROR(stream);
 }
 #endif
 
@@ -350,9 +354,9 @@ device_reset()
 
 /// create a cuda stream
 inline array_t<stream_t>
-stream_create(size_t nstreams, unsigned int flags = cudaStreamNonBlocking)
+stream_create(size_t nstreams, unsigned int flags = cudaStreamDefault)
 {
-    array_t<stream_t> streams(nstreams);
+    array_t<stream_t> streams(nstreams, nullptr);
     for(auto& itr : streams)
     {
         CUDA_CHECK_CALL(cudaStreamCreateWithFlags(&itr, flags));
