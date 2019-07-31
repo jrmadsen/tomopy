@@ -46,6 +46,8 @@
 // Possible speedups:
 //   * Profile code and check adding SIMD to various functions (from OpenMP)
 
+#if defined(TOMOPY_USE_MKL)
+
 //#define WRITE_FILES
 #define _USE_MATH_DEFINES
 
@@ -575,3 +577,5 @@ cxx_free_matrix_c(std::complex<float>**& m)
 }
 
 //===========================================================================//
+
+#endif /*defined(TOMOPY_USE_MKL)*/

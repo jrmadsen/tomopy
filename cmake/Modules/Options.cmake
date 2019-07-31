@@ -69,6 +69,7 @@ add_option(TOMOPY_USE_PTL "Enable Parallel Tasking Library (PTL)" OFF)
 add_option(TOMOPY_USE_CLANG_TIDY "Enable clang-tidy (C++ linter)" OFF)
 add_option(TOMOPY_USE_CUDA "Enable CUDA option for GPU execution" ${_USE_CUDA})
 add_option(TOMOPY_USER_FLAGS "Insert CFLAGS and CXXFLAGS regardless of whether pass check" OFF)
+add_option(TOMOPY_USE_MKL "Enable MKL support" ON)
 
 if(TOMOPY_USE_CUDA)
     add_option(TOMOPY_USE_NVTX "Enable NVTX for Nsight" OFF)

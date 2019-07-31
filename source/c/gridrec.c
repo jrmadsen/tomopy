@@ -44,6 +44,11 @@
 // Possible speedups:
 //   * Profile code and check adding SIMD to various functions (from OpenMP)
 
+#include <stdio.h>
+#include <stdlib.h>
+
+#if defined(TOMOPY_USE_MKL)
+
 //#define WRITE_FILES
 #define _USE_MATH_DEFINES
 
@@ -53,7 +58,6 @@
 #include "gridrec.h"
 #include "mkl.h"
 #include <math.h>
-#include <stdlib.h>
 #include <string.h>
 
 #ifndef M_PI
@@ -749,3 +753,19 @@ filter_is_2d(const char* name)
         return 1;
     return 0;
 }
+
+#else /*TOMOPY_USE_MKL*/
+void
+gridrec(const float* data, int dy, int dt, int dx, const float* center,
+        const float* theta, float* recon, int ngridx, int ngridy, const char* fname,
+        const float* filter_par)
+{
+    fprintf(stderr,
+      "\nRuntimeError: TomoPy was compiled without Intel MKL support. "
+      "Without the Intel Math Kernel Library, "
+      "the gridrec reconstruction algorithm is not available. "
+      "If you would like to be able to utilize gridrec without a dependence "
+      "on MKL, TomoPy welcomes code contributions.\n");
+    exit(EXIT_FAILURE);
+}
+#endif /*TOMOPY_USE_MKL*/

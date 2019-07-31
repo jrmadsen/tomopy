@@ -43,17 +43,20 @@ endif()
 
 ################################################################################
 #
-#        MKL (required)
+#        MKL (optional)
 #
 ################################################################################
-
-find_package(MKL REQUIRED)
-
-if(MKL_FOUND)
-    list(APPEND EXTERNAL_INCLUDE_DIRS ${MKL_INCLUDE_DIRS})
-    list(APPEND EXTERNAL_LIBRARIES ${MKL_LIBRARIES})
+if(TOMOPY_USE_MKL)
+    find_package(MKL)
+    if(MKL_FOUND)
+        add_library(tomopy-mkl INTERFACE)
+        set_target_properties(tomopy-mkl PROPERTIES
+            INTERFACE_COMPILE_DEFINITIONS    TOMOPY_USE_MKL
+            INTERFACE_INCLUDE_DIRECTORIES    "${MKL_INCLUDE_DIRS}"
+            INTERFACE_LINK_LIBRARIES         "${MKL_LIBRARIES}")
+        list(APPEND EXTERNAL_LIBRARIES tomopy-mkl)
+    endif()
 endif()
-
 
 ################################################################################
 #
