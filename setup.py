@@ -1,31 +1,39 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import os, sys, glob, shutil, subprocess as sp
+import argparse
+import glob
+import os
+import platform
 from skbuild import setup
 from skbuild.setuptools_wrap import create_skbuild_argparser
-import argparse
+import shutil
+import subprocess as sp
+import sys
 import warnings
-import platform
 
 cmake_args = []
 parser = argparse.ArgumentParser(add_help=False)
 parser.add_argument("-h", "--help", help="Print help", action='store_true')
 
+
 def add_bool_opt(opt, enable_opt, disable_opt):
+    """Append a CMake option to cmake_args depending on enable/diable_opt."""
     global cmake_args
     if enable_opt and disable_opt:
-        msg = """\nWarning! python options for CMake argument '{}' was enabled \
-AND disabled.\nGiving priority to disable...\n""".format(opt)
-        warnings.warn(msg)
+        warnings.warn(
+            "The Python option for CMake argument '{}' was enabled "
+            "AND disabled. Giving priority to disable.".format(opt),
+            SyntaxWarning)
         enable_opt = False
-
     if enable_opt:
         cmake_args.append("-D{}:BOOL={}".format(opt, "ON"))
     if disable_opt:
         cmake_args.append("-D{}:BOOL={}".format(opt, "OFF"))
 
+
 def add_option(lc_name, disp_name):
+    """Conveniently add enable/disable options to the setup CLI."""
     global parser
     # enable option
     parser.add_argument("--enable-{}".format(lc_name), action='store_true',
@@ -33,6 +41,7 @@ def add_option(lc_name, disp_name):
     # disable option
     parser.add_argument("--disable-{}".format(lc_name), action='store_true',
                         help="Explicitly disable {} build".format(disp_name))
+
 
 add_option("cuda", "CUDA")
 add_option("nvtx", "NVTX (NVIDIA Nsight)")
