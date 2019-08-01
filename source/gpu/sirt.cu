@@ -165,7 +165,7 @@ compute_projection(int p, int dy, int dt, int dx, int nx, int ny, const float* c
         auto* _rot        = rot + (s * nx * ny);
         auto* _tmp        = tmp + (s * nx * ny);
         auto* _sum        = sum + (s * dx);
-        auto* _reduce_tmp = reduce_tmp + (s * grid_size);
+        // auto* _reduce_tmp = reduce_tmp + (s * grid_size);
 
         // forward-rotate
         cuda::rotate(_rot, _recon, -theta_p, center[s], nx, ny, eInterp, stream);
