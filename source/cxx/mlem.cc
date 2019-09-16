@@ -121,55 +121,22 @@ pixels_kernel(int p, int dx, int nx, int ny, float* recon, const float* data, fl
     // ny == ngridy
     // compute simdata
 
-#define MANUAL_UNROLL
-
-#if defined(MANUAL_UNROLL)
-    constexpr size_t unroll_length = 32;
-    size_t           dx_end_unroll = dx / unroll_length;
-    size_t           dx_end_modulo = dx % unroll_length;
-#else
     auto dx_range = grid_strided_range<device::cpu, 1>(dx);
-#endif
-
     auto nx_range = grid_strided_range<device::cpu, 0>(nx);
 
     for(int i = nx_range.begin(); i < nx_range.end(); i += nx_range.stride())
     {
         auto* _recon = recon + i * nx;
-#if defined(MANUAL_UNROLL)
-        auto func = [&](size_t offset, size_t d) {
-            sum[d + offset] += _recon[d + offset];
-        };
-
-        for(size_t d = 0; d < dx_end_unroll; ++d)
-            apply::loop_unroll<unroll_length>(func, d * unroll_length);
-
-        for(size_t d = dx_end_unroll; d < dx_end_unroll + dx_end_modulo; ++d)
-            func(0, d);
-#else
         for(int d = dx_range.begin(); d < dx_range.end(); d += dx_range.stride())
             sum[d] += _recon[d];
-#endif
     }
 
     for(int i = nx_range.begin(); i < nx_range.end(); i += nx_range.stride())
     {
         auto* _recon = recon + i * nx;
         auto* _data  = data + p * dx;
-#if defined(MANUAL_UNROLL)
-        auto func = [&](size_t offset, size_t d) {
-            _recon[d + offset] += _data[d + offset] / sum[d + offset];
-        };
-
-        for(size_t d = 0; d < dx_end_unroll; ++d)
-            apply::loop_unroll<unroll_length>(func, d * unroll_length);
-
-        for(size_t d = dx_end_unroll; d < dx_end_unroll + dx_end_modulo; ++d)
-            func(0, d);
-#else
         for(int d = dx_range.begin(); d < dx_range.end(); d += dx_range.stride())
             _recon[d] += _data[d] / sum[d];
-#endif
     }
 }
 

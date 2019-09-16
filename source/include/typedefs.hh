@@ -65,20 +65,15 @@ using farray_t      = array_t<float>;
 using darray_t      = array_t<double>;
 using num_threads_t = decltype(std::thread::hardware_concurrency());
 using mutex_t       = std::mutex;
-
-#if !defined(TOMOPY_USE_PTL)
-using AutoLock = std::unique_lock<mutex_t>;
+using auto_lock     = std::unique_lock<mutex_t>;
 
 template <typename _Tp>
 mutex_t&
-TypeMutex()
+type_mutex()
 {
     static mutex_t _instance;
     return _instance;
 }
-#else
-#    include "PTL/AutoLock.hh"
-#endif
 
 //======================================================================================//
 

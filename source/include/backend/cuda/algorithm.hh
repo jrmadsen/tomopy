@@ -121,7 +121,8 @@ rotate(_Tp* dst, const _Tp* src, const float theta_rad, const float center, cons
 {
     CUDA_CHECK_LAST_ERROR(stream);
 
-    nppSetStream(stream);
+    if(stream != nppGetStream())
+        nppSetStream(stream);
 
     TOMOPY_NVXT_RANGE_PUSH(&nvtx_rotate);
     CUDA_CHECK_LAST_ERROR(stream);

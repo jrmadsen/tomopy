@@ -41,16 +41,14 @@ def generate(phantom, args):
             subset = list(args.subset)
             subset.sort()
             nbeg, nend = subset[0], subset[1]
-            if nbeg == nend:
-                nend += 1
             if not args.no_center:
                 ndiv = (nend - nbeg) // 2
                 offset = data_size // 2
                 nbeg = (offset - ndiv)
                 nend = (offset + ndiv)
             print("[partial]> slices = {} ({}, {}) of {}".format(
-                nend - nbeg, nbeg, nend, data_size))
-            obj = obj[nbeg:nend,:,:]
+                nend - nbeg + 1, nbeg, nend, data_size))
+            obj = obj[nbeg:(nend+1),:,:]
 
     with timemory.util.auto_timer("[tomopy.angles]"):
         ang = tomopy.angles(args.angles)
@@ -110,6 +108,9 @@ def run(phantom, algorithm, args, get_recon=False):
     # use the accelerated version
     if algorithm in ["mlem", "sirt"]:
         _kwargs["accelerated"] = True
+        _kwargs["pool_size"] = args.stream_size
+        _kwargs["block_size"] = [args.block_size]
+        _kwargs["grid_size"] = [args.grid_size]
 
     print("kwargs: {}".format(_kwargs))
     with timemory.util.auto_timer("[tomopy.recon(algorithm='{}')]".format(
@@ -297,6 +298,9 @@ if __name__ == "__main__":
     parser.add_argument("--no-center",
                         help="When used with '--subset', do no center subset",
                         action='store_true')
+    parser.add_argument("--stream-size", type=int, default=12, help="Number of streams")
+    parser.add_argument("--block-size", type=int, default=512, help="Block size")
+    parser.add_argument("--grid-size", type=int, default=0, help="Grid size")
 
     args = timemory.options.add_args_and_parse_known(parser)
 

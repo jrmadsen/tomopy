@@ -49,25 +49,25 @@
 #if defined(TOMOPY_USE_MKL)
 
 //#define WRITE_FILES
-#define _USE_MATH_DEFINES
+#    define _USE_MATH_DEFINES
 
 // Use X/Open-7, where posix_memalign is introduced
-#define _XOPEN_SOURCE 700
+#    define _XOPEN_SOURCE 700
 
-#include "gridrec.hh"
-#include "mkl.h"
-#include <complex>
+#    include "gridrec.hh"
+#    include "mkl.h"
+#    include <complex>
 
-#if defined(TOMOPY_CXX_GRIDREC)
+#    if defined(TOMOPY_CXX_GRIDREC)
 using namespace std::literals::complex_literals;
-#endif
-
-#if defined(_MSC_VER)
-#    if defined(__LIKELY)
-#        undef __LIKELY
 #    endif
-#    define __LIKELY(EXPR) EXPR
-#endif
+
+#    if defined(_MSC_VER)
+#        if defined(__LIKELY)
+#            undef __LIKELY
+#        endif
+#        define __LIKELY(EXPR) EXPR
+#    endif
 
 //===========================================================================//
 
@@ -76,7 +76,7 @@ cxx_gridrec(const float* data, int dy, int dt, int dx, const float* center,
             const float* theta, float* recon, int ngridx, int ngridy, const char* fname,
             const float* filter_par)
 {
-#if defined(TOMOPY_CXX_GRIDREC)
+#    if defined(TOMOPY_CXX_GRIDREC)
     int    s, p, iu, iv;
     int    j;
     float *sine, *cose, *wtbl, *winv;
@@ -426,9 +426,9 @@ cxx_gridrec(const float* data, int dy, int dt, int dx, const float* center,
     DftiFreeDescriptor(&reverse_1d);
     DftiFreeDescriptor(&forward_2d);
     return;
-#else
+#    else
     throw std::runtime_error("Error! TOMOPY_CXX_GRIDREC was disabled at compile time.");
-#endif
+#    endif
 }
 
 //===========================================================================//
@@ -438,7 +438,7 @@ cxx_set_filter_tables(int dt, int pd, float center, filter_func pf,
                       const float* filter_par, std::complex<float>* A,
                       unsigned char filter2d)
 {
-#if defined(TOMOPY_CXX_GRIDREC)
+#    if defined(TOMOPY_CXX_GRIDREC)
     // Set up the complex array, filphase[], each element of which
     // consists of a real filter factor [obtained from the function,
     // pf(...)], multiplying a complex phase factor (derived from the
@@ -483,9 +483,9 @@ cxx_set_filter_tables(int dt, int pd, float center, filter_func pf,
             }
         }
     }
-#else
+#    else
     throw std::runtime_error("Error! TOMOPY_CXX_GRIDREC was disabled at compile time.");
-#endif
+#    endif
 }
 
 //===========================================================================//
@@ -526,16 +526,16 @@ cxx_free_vector_c(std::complex<float>*& v)
 void*
 cxx_malloc_64bytes_aligned(size_t sz)
 {
-#if defined(__MINGW32__)
+#    if defined(__MINGW32__)
     return __mingw_aligned_malloc(sz, 64);
-#elif defined(_MSC_VER)
+#    elif defined(_MSC_VER)
     void* r = _aligned_malloc(sz, 64);
     return r;
-#else
+#    else
     void* r   = NULL;
     int   err = posix_memalign(&r, 64, sz);
     return (err) ? NULL : r;
-#endif
+#    endif
 }
 
 //===========================================================================//
@@ -566,13 +566,13 @@ void
 cxx_free_matrix_c(std::complex<float>**& m)
 {
     cxx_free_vector_c(m[0]);
-#if defined(__MINGW32__)
+#    if defined(__MINGW32__)
     __mingw_aligned_free(m);
-#elif defined(_MSC_VER)
+#    elif defined(_MSC_VER)
     _aligned_free(m);
-#else
+#    else
     free(m);
-#endif
+#    endif
     m = nullptr;
 }
 

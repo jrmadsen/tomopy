@@ -205,7 +205,7 @@ GetDevice(const std::string& preferred)
     }
     else
     {
-        AutoLock l(TypeMutex<decltype(std::cout)>());
+        auto_lock l(type_mutex<decltype(std::cout)>());
         std::cerr << "\n##### No CUDA device(s) available #####\n" << std::endl;
     }
 
@@ -239,7 +239,7 @@ GetDevice(const std::string& preferred)
         }
         DeviceOption::footer(ss);
 
-        AutoLock l(TypeMutex<decltype(std::cout)>());
+        auto_lock l(type_mutex<decltype(std::cout)>());
         std::cout << "\n" << ss.str() << std::endl;
     };
     //------------------------------------------------------------------------//
@@ -261,7 +261,7 @@ GetDevice(const std::string& preferred)
         ss << "Selected device: " << selected_opt << "\n";
         DeviceOption::spacer(ss, '-');
 
-        AutoLock l(TypeMutex<decltype(std::cout)>());
+        auto_lock l(type_mutex<decltype(std::cout)>());
         std::cout << ss.str() << std::endl;
     };
     //------------------------------------------------------------------------//
@@ -292,7 +292,7 @@ struct RuntimeOptions
     num_threads_t      pool_size     = HW_CONCURRENCY;
     int                interpolation = -1;
     DeviceOption       device;
-    std::array<int, 3> block_size = { { 32, 1, 1 } };
+    std::array<int, 3> block_size = { { 512, 1, 1 } };
     std::array<int, 3> grid_size  = { { 0, 0, 0 } };
 
     RuntimeOptions(int _pool_size, const char* _interp, const char* _device,
@@ -300,8 +300,10 @@ struct RuntimeOptions
     : pool_size(static_cast<num_threads_t>(_pool_size))
     , device(GetDevice(_device))
     {
-        memcpy(grid_size.data(), _grid_size, 3 * sizeof(int));
-        memcpy(block_size.data(), _block_size, 3 * sizeof(int));
+        memcpy(grid_size.data(), _grid_size, 1 * sizeof(int));
+        memcpy(block_size.data(), _block_size, 1 * sizeof(int));
+        grid_size[1] = grid_size[2] = 0;
+        block_size[1] = block_size[2] = 1;
 
         interpolation = interpolation::mode(_interp);
         if(device.key == "gpu" && !device_enabled())
@@ -329,7 +331,7 @@ struct RuntimeOptions
     {
         if(pool_size == 0)
         {
-            pool_size = std::min<num_threads_t>(2 * HW_CONCURRENCY, 24);
+            pool_size = std::min<num_threads_t>(HW_CONCURRENCY, 12);
         }
     }
 

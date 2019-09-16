@@ -153,7 +153,7 @@ cuda::device_query()
         return;
     }
 
-    AutoLock l(TypeMutex<decltype(std::cout)>());
+    auto_lock l(type_mutex<decltype(std::cout)>());
 
     if(deviceCount == 0)
         printf("No available CUDA device(s) detected\n");

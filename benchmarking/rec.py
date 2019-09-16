@@ -120,8 +120,10 @@ def reconstruct(h5fname, sino, rot_center, args, blocked_views=None):
     # use the accelerated version
     if algorithm in ["mlem", "sirt"]:
         _kwargs["accelerated"] = True
-        _kwargs["interpolation"] = "nn"
-        _kwargs["block_size"] = np.array([512, 1, 1], dtype='int32')
+        _kwargs["interpolation"] = args.interpolation
+        _kwargs["block_size"] = [args.block_size]
+        _kwargs["grid_size"] = [args.grid_size]
+        _kwargs["pool_size"] = args.pool_size
 
     # don't assign "num_iter" if gridrec or fbp
     if algorithm not in ["fbp", "gridrec"]:
@@ -381,7 +383,12 @@ def main(arg):
     parser.add_argument("--no-center",
                         help="When used with '--subset', do no center subset",
                         action='store_true')
-
+    parser.add_argument("-P", "--pool-size", type=int, default=12, help="Number of streams/threads")
+    parser.add_argument("-B", "--block-size", type=int, default=512, help="Block size")
+    parser.add_argument("-G", "--grid-size", type=int, default=0, help="Grid size")
+    parser.add_argument("-I", "--interpolation", type=str, default="nn", help="Interpolation",
+                        choices=("nn", "linear", "cubic"))
+    
     args = parser.parse_args()
 
     print("\nargs: {}\n".format(args))

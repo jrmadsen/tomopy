@@ -50,37 +50,37 @@
 #if defined(TOMOPY_USE_MKL)
 
 //#define WRITE_FILES
-#define _USE_MATH_DEFINES
+#    define _USE_MATH_DEFINES
 
 // Use X/Open-7, where posix_memalign is introduced
-#define _XOPEN_SOURCE 700
+#    define _XOPEN_SOURCE 700
 
-#include "gridrec.h"
-#include "mkl.h"
-#include <math.h>
-#include <string.h>
+#    include "gridrec.h"
+#    include "mkl.h"
+#    include <math.h>
+#    include <string.h>
 
-#ifndef M_PI
-#    define M_PI 3.14159265359
-#endif
+#    ifndef M_PI
+#        define M_PI 3.14159265359
+#    endif
 
-#define __LIKELY(x) __builtin_expect(!!(x), 1)
-#ifdef __INTEL_COMPILER
-#    define __PRAGMA_SIMD _Pragma("simd assert")
-#    define __PRAGMA_SIMD_VECREMAINDER _Pragma("simd assert, vecremainder")
-#    define __PRAGMA_SIMD_VECREMAINDER_VECLEN8                                           \
-        _Pragma("simd assert, vecremainder, vectorlength(8)")
-#    define __PRAGMA_OMP_SIMD_COLLAPSE _Pragma("omp simd collapse(2)")
-#    define __PRAGMA_IVDEP _Pragma("ivdep")
-#    define __ASSSUME_64BYTES_ALIGNED(x) __assume_aligned((x), 64)
-#else
-#    define __PRAGMA_SIMD
-#    define __PRAGMA_SIMD_VECREMAINDER
-#    define __PRAGMA_SIMD_VECREMAINDER_VECLEN8
-#    define __PRAGMA_OMP_SIMD_COLLAPSE
-#    define __PRAGMA_IVDEP
-#    define __ASSSUME_64BYTES_ALIGNED(x)
-#endif
+#    define __LIKELY(x) __builtin_expect(!!(x), 1)
+#    ifdef __INTEL_COMPILER
+#        define __PRAGMA_SIMD _Pragma("simd assert")
+#        define __PRAGMA_SIMD_VECREMAINDER _Pragma("simd assert, vecremainder")
+#        define __PRAGMA_SIMD_VECREMAINDER_VECLEN8                                       \
+            _Pragma("simd assert, vecremainder, vectorlength(8)")
+#        define __PRAGMA_OMP_SIMD_COLLAPSE _Pragma("omp simd collapse(2)")
+#        define __PRAGMA_IVDEP _Pragma("ivdep")
+#        define __ASSSUME_64BYTES_ALIGNED(x) __assume_aligned((x), 64)
+#    else
+#        define __PRAGMA_SIMD
+#        define __PRAGMA_SIMD_VECREMAINDER
+#        define __PRAGMA_SIMD_VECREMAINDER_VECLEN8
+#        define __PRAGMA_OMP_SIMD_COLLAPSE
+#        define __PRAGMA_IVDEP
+#        define __ASSSUME_64BYTES_ALIGNED(x)
+#    endif
 
 void
 gridrec(const float* data, int dy, int dt, int dx, const float* center,
@@ -90,10 +90,10 @@ gridrec(const float* data, int dy, int dt, int dx, const float* center,
     if(dy == 0 || dt == 0 || dx == 0)
         return;
 
-#if defined(TOMOPY_CXX_GRIDREC)
+#    if defined(TOMOPY_CXX_GRIDREC)
     cxx_gridrec(data, dy, dt, dx, center, theta, recon, ngridx, ngridy, fname,
                 filter_par);
-#else
+#    else
     int    s, p, iu, iv;
     int    j;
     float *sine, *cose, *wtbl, *winv;
@@ -439,7 +439,7 @@ gridrec(const float* data, int dy, int dt, int dx, const float* center,
     DftiFreeDescriptor(&reverse_1d);
     DftiFreeDescriptor(&forward_2d);
     return;
-#endif
+#    endif
 }
 
 void
@@ -451,11 +451,11 @@ set_filter_tables(int dt, int pd, float center,
     // consists of a real filter factor [obtained from the function,
     // (*pf)()], multiplying a complex phase factor (derived from the
     // parameter, center}.  See Phase 1 comments.
-#if defined(TOMOPY_CXX_GRIDREC) && defined(_MSC_VER)
+#    if defined(TOMOPY_CXX_GRIDREC) && defined(_MSC_VER)
     // MSVC has an issue with line:
     //      A[j] *= (cosf(x) - I * sinf(x)) * norm;
     // below
-#else
+#    else
 
     const float norm  = M_PI / pd / dt;
     const float rtmp1 = 2 * M_PI * center / pd;
@@ -497,7 +497,7 @@ set_filter_tables(int dt, int pd, float center,
         }
     }
 
-#endif
+#    endif
 }
 
 void
@@ -586,16 +586,16 @@ legendre(int n, const float* coefs, float x)
 static inline void*
 malloc_64bytes_aligned(size_t sz)
 {
-#ifdef __MINGW32__
+#    ifdef __MINGW32__
     return __mingw_aligned_malloc(sz, 64);
-#elif defined(_MSC_VER)
+#    elif defined(_MSC_VER)
     void* r = _aligned_malloc(sz, 64);
     return r;
-#else
+#    else
     void* r   = NULL;
     int   err = posix_memalign(&r, 64, sz);
     return (err) ? NULL : r;
-#endif
+#    endif
 }
 
 inline float*
@@ -645,11 +645,11 @@ inline void
 free_matrix_c(float _Complex** m)
 {
     free_vector_c(m[0]);
-#ifdef __MINGW32__
+#    ifdef __MINGW32__
     __mingw_aligned_free(m);
-#else
+#    else
     free(m);
-#endif
+#    endif
 }
 
 // No filter
@@ -754,18 +754,18 @@ filter_is_2d(const char* name)
     return 0;
 }
 
-#else /*TOMOPY_USE_MKL*/
+#else  /*TOMOPY_USE_MKL*/
 void
 gridrec(const float* data, int dy, int dt, int dx, const float* center,
         const float* theta, float* recon, int ngridx, int ngridy, const char* fname,
         const float* filter_par)
 {
     fprintf(stderr,
-      "\nRuntimeError: TomoPy was compiled without Intel MKL support. "
-      "Without the Intel Math Kernel Library, "
-      "the gridrec reconstruction algorithm is not available. "
-      "If you would like to be able to utilize gridrec without a dependence "
-      "on MKL, TomoPy welcomes code contributions.\n");
+            "\nRuntimeError: TomoPy was compiled without Intel MKL support. "
+            "Without the Intel Math Kernel Library, "
+            "the gridrec reconstruction algorithm is not available. "
+            "If you would like to be able to utilize gridrec without a dependence "
+            "on MKL, TomoPy welcomes code contributions.\n");
     exit(EXIT_FAILURE);
 }
 #endif /*TOMOPY_USE_MKL*/

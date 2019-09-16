@@ -209,8 +209,6 @@ launch(const kernel_params& params, int32_t size, stream_t stream, _Func& func,
 {
     auto block = params.block;
     auto ngrid = params.compute(size, block);
-    // printf("launching kernel for data of size %i with <<<%i, %i>>>\n", size, ngrid,
-    //       block);
     func<<<ngrid, block, 0, stream>>>(std::forward<_Args>(args)...);
     CUDA_CHECK_LAST_ERROR(stream);
 }
@@ -354,13 +352,11 @@ device_reset()
 
 /// create a cuda stream
 inline array_t<stream_t>
-stream_create(size_t nstreams, unsigned int flags = cudaStreamDefault)
+stream_create(size_t nstreams, unsigned int flags = cudaStreamNonBlocking)
 {
     array_t<stream_t> streams(nstreams, nullptr);
     for(auto& itr : streams)
-    {
         CUDA_CHECK_CALL(cudaStreamCreateWithFlags(&itr, flags));
-    }
     return streams;
 }
 

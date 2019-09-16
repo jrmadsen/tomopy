@@ -25,6 +25,25 @@ endif()
 
 ################################################################################
 #
+#        PTL submodule
+#
+################################################################################
+
+if(TOMOPY_USE_PTL)
+    checkout_git_submodule(RECURSIVE TEST_FILE CMakeLists.txt
+        RELATIVE_PATH source/PTL WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+    add_subdirectory(source/PTL)
+    if(BUILD_STATIC_LIBS)
+        list(APPEND EXTERNAL_LIBRARIES ptl-static)
+    else()
+        list(APPEND EXTERNAL_LIBRARIES ptl-shared)
+    endif()
+    list(APPEND ${PROJECT_NAME}_DEFINITIONS TOMOPY_USE_PTL)
+endif()
+
+
+################################################################################
+#
 #        Prefix path to Anaconda installation
 #
 ################################################################################
@@ -167,24 +186,6 @@ if(TOMOPY_USE_OPENMP)
 
 endif()
 
-################################################################################
-#
-#        PTL submodule
-#
-################################################################################
-
-if(TOMOPY_USE_PTL)
-    checkout_git_submodule(RECURSIVE TEST_FILE CMakeLists.txt
-        RELATIVE_PATH source/PTL WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
-    add_subdirectory(source/PTL)
-    if(BUILD_STATIC_LIBS)
-        list(APPEND EXTERNAL_LIBRARIES ptl-static)
-    else()
-        list(APPEND EXTERNAL_LIBRARIES ptl-shared)
-    endif()
-    list(APPEND ${PROJECT_NAME}_DEFINITIONS TOMOPY_USE_PTL)
-endif()
-
 
 ################################################################################
 #
@@ -216,13 +217,6 @@ if(TOMOPY_USE_CUDA)
         add_feature(CUDA_ARCH "CUDA architecture (options: ${CUDA_ARCHITECTURES})")
         set_property(CACHE CUDA_ARCH PROPERTY STRINGS ${CUDA_ARCHITECTURES})
 
-        #   30, 32      + Kepler support
-        #               + Unified memory programming
-        #   35          + Dynamic parallelism support
-        #   50, 52, 53  + Maxwell support
-        #   60, 61, 62  + Pascal support
-        #   70, 72      + Volta support
-        #   75          + Turing support
         set(cuda_kepler_arch    30)
         set(cuda_tesla_arch     35)
         set(cuda_maxwell_arch   50)
@@ -232,66 +226,32 @@ if(TOMOPY_USE_CUDA)
 
         if(NOT "${CUDA_ARCH}" STREQUAL "${CUDA_AUTO_ARCH}")
             if(NOT "${CUDA_ARCH}" IN_LIST CUDA_ARCHITECTURES)
-                message(WARNING "CUDA architecture \"${CUDA_ARCH}\" not known. Options: ${CUDA_ARCHITECTURES}")
+                message(WARNING
+                    "CUDA architecture \"${CUDA_ARCH}\" not known. Options: ${CUDA_ARCH}")
                 unset(CUDA_ARCH CACHE)
-                unset(CUDA_ARCH )
                 set(CUDA_ARCH "${CUDA_AUTO_ARCH}")
             else()
                 set(_ARCH_NUM ${cuda_${CUDA_ARCH}_arch})
             endif()
         endif()
 
-        string(REPLACE "." ";" CUDA_MAJOR_VERSION "${CUDA_VERSION}")
-        list(GET CUDA_MAJOR_VERSION 0 CUDA_MAJOR_VERSION)
+        option(TIMEMORY_DEPRECATED_CUDA_SUPPORT "Enable support for old CUDA flags" OFF)
+        mark_as_advanced(TIMEMORY_DEPRECATED_CUDA_SUPPORT)
 
-        set(cuda_version_arch_fallback  35)
-        set(cuda_version_arch_10        50)
-        set(cuda_version_arch_9         50)
-        set(cuda_version_arch_8         30)
-
-        set(CUDA_ARCH_NUM 50)
-        if("${CUDA_ARCH}" STREQUAL "${CUDA_AUTO_ARCH}")
-            set(CUDA_ARCH_NUM ${_ARCH_NUM})
-        else()
-            set(CUDA_ARCH_NUM ${cuda_version_arch_${CUDA_MAJOR_VERSION}})
-        endif()
-
-        if(NOT CUDA_ARCH_NUM)
-            set(CUDA_ARCH_NUM ${cuda_version_arch_fallback})
-        endif()
-
-        if(CUDA_MAJOR_VERSION VERSION_GREATER 10 OR CUDA_MAJOR_VERSION MATCHES 10)
-            target_compile_options(tomopy-cuda INTERFACE $<$<COMPILE_LANGUAGE:CUDA>:
-                -arch=sm_${CUDA_ARCH_NUM}
+        if(TIMEMORY_DEPRECATED_CUDA_SUPPORT)
+            add_interface_library(tomopy-cuda-7)
+            target_compile_options(tomopy-cuda-7 INTERFACE $<$<COMPILE_LANGUAGE:CUDA>:
+                $<IF:$<STREQUAL:${CUDA_ARCH},${CUDA_AUTO_ARCH}>,-arch=sm_35,-arch=sm_${_ARCH_NUM}>
+                -gencode=arch=compute_20,code=sm_20
+                -gencode=arch=compute_30,code=sm_30
                 -gencode=arch=compute_50,code=sm_50
                 -gencode=arch=compute_52,code=sm_52
-                -gencode=arch=compute_60,code=sm_60
-                -gencode=arch=compute_61,code=sm_61
-                -gencode=arch=compute_70,code=sm_70
-                -gencode=arch=compute_75,code=sm_75
-                -gencode=arch=compute_75,code=compute_75
+                -gencode=arch=compute_52,code=compute_52
                 >)
-        elseif(CUDA_MAJOR_VERSION MATCHES 9)
-            set(CUDA_ARCH_NUM 50)
-            if("${CUDA_ARCH}" STREQUAL "${CUDA_AUTO_ARCH}")
-                set(CUDA_ARCH_NUM ${_ARCH_NUM})
-            endif()
-            target_compile_options(tomopy-cuda INTERFACE $<$<COMPILE_LANGUAGE:CUDA>:
-                -arch=sm_${CUDA_ARCH_NUM}
-                -gencode=arch=compute_50,code=sm_50
-                -gencode=arch=compute_52,code=sm_52
-                -gencode=arch=compute_60,code=sm_60
-                -gencode=arch=compute_61,code=sm_61
-                -gencode=arch=compute_70,code=sm_70
-                -gencode=arch=compute_70,code=compute_70
-                >)
-        elseif(CUDA_MAJOR_VERSION MATCHES 8)
-            set(CUDA_ARCH_NUM 30)
-            if("${CUDA_ARCH}" STREQUAL "${CUDA_AUTO_ARCH}")
-                set(CUDA_ARCH_NUM ${_ARCH_NUM})
-            endif()
-            target_compile_options(tomopy-cuda INTERFACE $<$<COMPILE_LANGUAGE:CUDA>:
-                -arch=sm_${CUDA_ARCH_NUM}
+
+            add_interface_library(tomopy-cuda-8)
+            target_compile_options(tomopy-cuda-8 INTERFACE $<$<COMPILE_LANGUAGE:CUDA>:
+                $<IF:$<STREQUAL:${CUDA_ARCH},${CUDA_AUTO_ARCH}>,-arch=sm_35,-arch=sm_${_ARCH_NUM}>
                 -gencode=arch=compute_20,code=sm_20
                 -gencode=arch=compute_30,code=sm_30
                 -gencode=arch=compute_50,code=sm_50
@@ -300,8 +260,46 @@ if(TOMOPY_USE_CUDA)
                 -gencode=arch=compute_61,code=sm_61
                 -gencode=arch=compute_61,code=compute_61
                 >)
+        endif()
+
+        add_interface_library(tomopy-cuda-9)
+        target_compile_options(tomopy-cuda-9 INTERFACE $<$<COMPILE_LANGUAGE:CUDA>:
+            $<IF:$<STREQUAL:${CUDA_ARCH},${CUDA_AUTO_ARCH}>,-arch=sm_50,-arch=sm_${_ARCH_NUM}>
+            -gencode=arch=compute_50,code=sm_50
+            -gencode=arch=compute_52,code=sm_52
+            -gencode=arch=compute_60,code=sm_60
+            -gencode=arch=compute_61,code=sm_61
+            -gencode=arch=compute_70,code=sm_70
+            -gencode=arch=compute_70,code=compute_70
+            >)
+
+        add_interface_library(tomopy-cuda-10)
+        target_compile_options(tomopy-cuda-10 INTERFACE $<$<COMPILE_LANGUAGE:CUDA>:
+            $<IF:$<STREQUAL:"${CUDA_ARCH}","${CUDA_AUTO_ARCH}">,-arch=sm_50,-arch=sm_${_ARCH_NUM}>
+            -gencode=arch=compute_60,code=sm_60
+            -gencode=arch=compute_61,code=sm_61
+            -gencode=arch=compute_70,code=sm_70
+            -gencode=arch=compute_75,code=sm_75
+            -gencode=arch=compute_75,code=compute_75
+            >)
+
+        string(REPLACE "." ";" CUDA_MAJOR_VERSION "${CUDA_VERSION}")
+        list(GET CUDA_MAJOR_VERSION 0 CUDA_MAJOR_VERSION)
+
+        if(CUDA_MAJOR_VERSION VERSION_GREATER 10 OR CUDA_MAJOR_VERSION MATCHES 10)
+            target_link_libraries(tomopy-cuda INTERFACE tomopy-cuda-10)
+        elseif(CUDA_MAJOR_VERSION MATCHES 9)
+            target_link_libraries(tomopy-cuda INTERFACE tomopy-cuda-9)
         else()
-            message(FATAL_ERROR "TomoPy requires CUDA >= 8.0, current version: ${CUDA_VERSION}")
+            if(TIMEMORY_DEPRECATED_CUDA_SUPPORT)
+                if(CUDA_MAJOR_VERSION MATCHES 8)
+                    target_link_libraries(tomopy-cuda INTERFACE tomopy-cuda-8)
+                elseif(CUDA_MAJOR_VERSION MATCHES 7)
+                    target_link_libraries(tomopy-cuda INTERFACE tomopy-cuda-7)
+                endif()
+            else()
+                message(WARNING "CUDA version < 9 detected. Enable TIMEMORY_DEPRECATED_CUDA_SUPPORT")
+            endif()
         endif()
 
         list(APPEND EXTERNAL_LIBRARIES tomopy-cuda)
